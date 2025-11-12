@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt1/KeyveveTakeHome/backend/app/models/__init__.py
+# hypothesis_version: 6.147.0
+
+['Activity', 'Assumptions', 'Attraction', 'Choice', 'ChoiceFeatures', 'ChoiceKind', 'Citation', 'CostBreakdown', 'DateWindow', 'DayItinerary', 'DayPlan', 'Decision', 'FlightOption', 'Geo', 'IntentV1', 'ItineraryV1', 'LockedSlot', 'Lodging', 'Money', 'PlanV1', 'Preferences', 'Provenance', 'Slot', 'Tier', 'TimeWindow', 'TransitLeg', 'TransitMode', 'Violation', 'ViolationKind', 'WeatherDay', 'Window']

@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+        
+    - name: Run ruff
+      run: |
+        ruff check backend/ tests/ scripts/ eval/
+        
+    - name: Run black --check
+      run: |
+        black --check backend/ tests/ scripts/ eval/
+        
+    - name: Run mypy
+      run: |
+        mypy backend/ scripts/ eval/
+        
+    - name: Run pytest
+      run: |
+        pytest -q
+        
+    - name: Export schemas
+      run: |
+        python scripts/export_schemas.py
+        
+    - name: Verify schema files exist
+      run: |
+        test -f docs/schemas/PlanV1.schema.json
+        test -f docs/schemas/ItineraryV1.schema.json
+        
+    - name: Run eval runner
+      run: |
+        cd eval && python runner.py

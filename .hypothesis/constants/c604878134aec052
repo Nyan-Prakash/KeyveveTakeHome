@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt1/KeyveveTakeHome/backend/app/models/intent.py
+# hypothesis_version: 6.147.0
+
+['Destination city', 'IATA airport codes', 'Travel date range', 'User preferences', 'airports', 'budget_usd_cents', 'end', 'start']

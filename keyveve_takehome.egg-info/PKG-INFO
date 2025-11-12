@@ -1,0 +1,316 @@
+Metadata-Version: 2.4
+Name: keyveve-takehome
+Version: 0.1.0
+Summary: Agentic Travel Planner - Keyveve Take-Home
+Author-email: Engineering Team <eng@keyveve.com>
+License: MIT
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3.11
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: pydantic>=2.5.0
+Requires-Dist: pydantic-settings>=2.1.0
+Requires-Dist: pytest>=7.4.0
+Requires-Dist: ruff>=0.1.0
+Requires-Dist: black>=23.0.0
+Requires-Dist: mypy>=1.7.0
+Requires-Dist: types-python-dateutil
+Requires-Dist: hypothesis>=6.88.0
+Requires-Dist: pyyaml>=6.0.1
+Requires-Dist: python-dateutil>=2.8.0
+Provides-Extra: dev
+Requires-Dist: pre-commit>=3.5.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.1.0; extra == "dev"
+Requires-Dist: pytest-xdist>=3.3.0; extra == "dev"
+
+# Keyveve Travel Planner - Take Home Implementation
+
+An agentic travel planner that generates 4–7 day itineraries with multi-constraint verification and deterministic repair. This is the PR-1 implementation focusing on contracts, typed settings, evaluation skeleton, and CI infrastructure.
+
+## 🏗️ Architecture Overview
+
+This implementation follows the specification outlined in `Docs/SPEC.md`. The current PR-1 includes:
+
+- **Typed Models**: Pydantic v2 models with validation for all data contracts
+- **Configuration Management**: Single source of truth for all settings
+- **Evaluation Framework**: YAML-driven scenario testing with stub implementations
+- **CI/CD Pipeline**: Automated testing with ruff, black, mypy, and pytest
+- **Schema Export**: JSON Schema generation for API contracts
+
+## 📋 Requirements
+
+- Python 3.11+
+- Dependencies managed via `pyproject.toml`
+
+## 🚀 Quick Start
+
+### Development Setup
+
+```bash
+# Clone and install
+git clone <repository-url>
+cd KeyveveTakeHome
+pip install -e .
+
+# Install pre-commit hooks
+pre-commit install
+
+# Copy environment template
+cp .env.example .env
+# Edit .env with your configuration
+```
+
+### Running the Application
+
+```bash
+# Run all tests
+pytest -q
+
+# Run specific test categories
+pytest tests/unit/ -m unit
+pytest tests/eval/ -m eval
+
+# Run linting and formatting
+ruff check .
+black --check .
+mypy backend/ scripts/ eval/
+
+# Export JSON schemas
+python scripts/export_schemas.py
+
+# Run evaluation scenarios
+cd eval && python runner.py
+```
+
+## 📁 Project Structure
+
+```
+backend/
+  app/
+    config.py              # Application settings (single source of truth)
+    models/
+      __init__.py          # Convenient re-exports
+      common.py            # Shared types, enums, Provenance
+      intent.py            # IntentV1, DateWindow, Preferences
+      plan.py              # PlanV1, DayPlan, Slot, Choice
+      tool_results.py      # FlightOption, Lodging, Attraction, etc.
+      violations.py        # Violation tracking
+      itinerary.py         # ItineraryV1 final output
+
+docs/
+  SPEC.md                  # Complete system specification
+  schemas/                 # Auto-generated JSON schemas
+
+eval/
+  scenarios.yaml           # Test scenarios (happy_stub, budget_fail_stub)
+  runner.py               # Evaluation runner with stub implementations
+
+scripts/
+  export_schemas.py        # JSON schema generation
+
+tests/
+  unit/
+    test_contracts_validators.py    # Model validation tests
+    test_tri_state_serialization.py # Tri-state boolean tests
+    test_jsonschema_roundtrip.py    # Schema validation tests
+    test_constants_single_source.py # Settings accessibility tests
+    test_nonoverlap_property.py     # Property-based slot tests
+  eval/
+    test_eval_runner.py             # Evaluation framework tests
+
+.github/workflows/ci.yml   # CI pipeline
+.env.example              # Environment template
+pyproject.toml            # Dependencies and tool config
+```
+
+## 🔧 Configuration
+
+All configuration is managed through environment variables loaded into the `Settings` class:
+
+```python
+from backend.app.config import get_settings
+
+settings = get_settings()
+print(f"Airport buffer: {settings.airport_buffer_min} minutes")
+```
+
+### Key Configuration Categories
+
+- **Database**: PostgreSQL and Redis connection URLs
+- **Security**: JWT keys, CORS origins  
+- **Performance**: Timeouts, retries, circuit breaker settings
+- **External APIs**: Weather API keys
+- **Evaluation**: Random seeds, test parameters
+
+## 🧪 Testing Strategy
+
+### Unit Tests
+
+- **Model Validation**: Contract enforcement, field validators
+- **Tri-State Booleans**: Proper `None`/`True`/`False` handling
+- **Schema Roundtrips**: JSON serialization validation
+- **Property Tests**: Non-overlapping slot generation
+
+### Evaluation Tests
+
+- **Scenario Runner**: YAML-driven test cases
+- **Stub Implementations**: Minimal viable data for testing
+- **Predicate Evaluation**: Python expression evaluation in restricted environment
+
+### Running Tests
+
+```bash
+# All tests
+pytest -q
+
+# With coverage
+pytest --cov=backend --cov-report=term-missing
+
+# Specific markers
+pytest -m unit          # Unit tests only
+pytest -m eval          # Evaluation tests only
+pytest -m "not slow"    # Skip slow tests
+```
+
+## 📊 Data Models
+
+### Core Types
+
+- **IntentV1**: User travel preferences and constraints
+- **PlanV1**: Generated travel plan with alternatives
+- **ItineraryV1**: Final formatted output with costs and decisions
+
+### Key Features
+
+- **Tri-State Booleans**: `indoor` and `kid_friendly` fields support `True`/`False`/`None`
+- **Opening Hours**: Keyed by weekday `"0"`–`"6"` with timezone-aware windows
+- **Money as Cents**: Integer cents for exact arithmetic
+- **Provenance Tracking**: Every data point includes source information
+
+### Validation Rules
+
+- **Date Windows**: End ≥ start date
+- **Budget**: Must be positive
+- **Airports**: At least one required  
+- **Day Count**: 4–7 days enforced
+- **Non-Overlapping Slots**: Within-day scheduling validation
+
+## 🔄 Evaluation Framework
+
+### Scenario Format
+
+```yaml
+scenarios:
+  - scenario_id: happy_stub
+    description: "Trivial plan within budget"
+    intent:
+      city: "Paris"
+      budget_usd_cents: 250000
+      # ... other fields
+    must_satisfy:
+      - predicate: "itinerary.cost_breakdown.total_usd_cents <= intent.budget_usd_cents"
+        description: "Cost within budget"
+```
+
+### Running Evaluations
+
+```bash
+cd eval
+python runner.py
+```
+
+The runner creates stub data satisfying the models and evaluates predicates using a restricted Python environment.
+
+## 📈 CI/CD Pipeline
+
+The GitHub Actions workflow runs:
+
+1. **Linting**: `ruff check` for code quality
+2. **Formatting**: `black --check` for consistent style  
+3. **Type Checking**: `mypy --strict` for type safety
+4. **Testing**: `pytest -q` for all test suites
+5. **Schema Export**: Verify JSON schema generation
+6. **Evaluation**: Run scenario tests
+
+### Local Development
+
+```bash
+# Run the full CI pipeline locally
+ruff check .
+black --check .
+mypy backend/ scripts/ eval/
+pytest -q
+python scripts/export_schemas.py
+cd eval && python runner.py
+```
+
+## 🎯 Key Design Decisions
+
+### ADR-001: Tri-State Booleans
+Choice between `Optional[bool]` vs custom enum. Selected `Optional[bool]` for simplicity and JSON compatibility.
+
+### ADR-002: Money as Integer Cents
+Avoids floating-point precision issues. All monetary values stored as `int` cents with display formatting at render time.
+
+### ADR-003: UTC Storage + Timezone String
+Stores UTC datetime + separate IANA timezone field for DST handling and historical accuracy.
+
+### ADR-004: Pydantic v2 Validation
+Leverages Pydantic's built-in validators and field validation for contract enforcement.
+
+## 🚧 Current Limitations (PR-1 Scope)
+
+This PR implements the foundational contracts and evaluation skeleton. **Not included**:
+
+- HTTP API endpoints (FastAPI)
+- Database models (SQLAlchemy)
+- Tool adapters (weather, flights, etc.)
+- LangGraph orchestration
+- Authentication/authorization
+- Redis caching
+- SSE streaming
+
+These components will be added in subsequent PRs following the phased implementation plan.
+
+## 🔍 Debugging
+
+### Common Issues
+
+1. **Import Errors**: Ensure you've run `pip install -e .`
+2. **Test Failures**: Check that all dependencies are installed
+3. **Validation Errors**: Review model constraints in test output
+4. **Schema Export**: Ensure `docs/schemas/` directory permissions
+
+### Useful Commands
+
+```bash
+# Check specific model validation
+python -c "from backend.app.models import IntentV1; print(IntentV1.model_json_schema())"
+
+# Validate scenarios YAML
+python -c "import yaml; yaml.safe_load(open('eval/scenarios.yaml'))"
+
+# Test specific module
+pytest tests/unit/test_tri_state_serialization.py -v
+```
+
+## 📚 Next Steps
+
+1. **PR-2**: FastAPI endpoints and middleware
+2. **PR-3**: Database models and migrations  
+3. **PR-4**: Tool adapters and external API integration
+4. **PR-5**: LangGraph orchestration and business logic
+5. **PR-6**: Authentication, caching, and production features
+
+## 🤝 Contributing
+
+1. Follow the established patterns in existing models
+2. Add tests for any new validation rules
+3. Update this README for significant changes
+4. Ensure all CI checks pass before submitting PRs
+
+## 📝 License
+
+MIT License - see LICENSE file for details.

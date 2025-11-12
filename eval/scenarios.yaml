@@ -1,0 +1,44 @@
+scenarios:
+  - scenario_id: happy_stub
+    description: "Trivial plan within budget"
+    intent:
+      city: "Paris"
+      date_window:
+        start: "2025-06-01"
+        end: "2025-06-05"
+        tz: "Europe/Paris"
+      budget_usd_cents: 250000  # $2,500
+      airports: ["CDG"]
+      prefs:
+        kid_friendly: false
+        themes: ["art"]
+        avoid_overnight: false
+        locked_slots: []
+    must_satisfy:
+      - predicate: "itinerary.cost_breakdown.total_usd_cents <= intent.budget_usd_cents"
+        description: "Cost within budget"
+      - predicate: "len(itinerary.days) >= 4"
+        description: "At least 4 days"
+      - predicate: "len(itinerary.days) <= 7"
+        description: "At most 7 days"
+      - predicate: "len(itinerary.citations) > 0"
+        description: "Has citations"
+
+  - scenario_id: budget_fail_stub
+    description: "Plan that should exceed budget"
+    intent:
+      city: "Paris"
+      date_window:
+        start: "2025-06-01"
+        end: "2025-06-05" 
+        tz: "Europe/Paris"
+      budget_usd_cents: 100000  # $1,000 - too low
+      airports: ["CDG"]
+      prefs:
+        kid_friendly: false
+        themes: ["luxury"]
+        avoid_overnight: false
+        locked_slots: []
+    must_satisfy:
+      - predicate: "itinerary.cost_breakdown.total_usd_cents > intent.budget_usd_cents"
+        description: "Cost exceeds budget (should fail)"

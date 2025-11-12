@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt1/KeyveveTakeHome/backend/app/models/itinerary.py
+# hypothesis_version: 6.147.0
+
+['Activity location', 'Activity name', 'Cost breakdown', 'Daily itineraries', 'Date for this day', 'Original user intent', 'Scheduled activities', 'Source of the claim', 'Tracing identifier', 'Type of activity']

@@ -1,0 +1,327 @@
+{
+  "$defs": {
+    "Assumptions": {
+      "description": "Planning assumptions and constants.",
+      "properties": {
+        "fx_rate_usd_eur": {
+          "description": "USD to EUR exchange rate",
+          "title": "Fx Rate Usd Eur",
+          "type": "number"
+        },
+        "daily_spend_est_cents": {
+          "description": "Estimated daily spending in cents",
+          "title": "Daily Spend Est Cents",
+          "type": "integer"
+        },
+        "transit_buffer_minutes": {
+          "default": 15,
+          "description": "Buffer time for transit connections",
+          "title": "Transit Buffer Minutes",
+          "type": "integer"
+        },
+        "airport_buffer_minutes": {
+          "default": 120,
+          "description": "Buffer time for airport connections",
+          "title": "Airport Buffer Minutes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "fx_rate_usd_eur",
+        "daily_spend_est_cents"
+      ],
+      "title": "Assumptions",
+      "type": "object"
+    },
+    "Choice": {
+      "description": "A ranked alternative for a slot.",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ChoiceKind",
+          "description": "Type of choice"
+        },
+        "option_ref": {
+          "description": "Reference to detailed option data",
+          "title": "Option Ref",
+          "type": "string"
+        },
+        "features": {
+          "$ref": "#/$defs/ChoiceFeatures",
+          "description": "Extracted features for scoring"
+        },
+        "score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Selection score",
+          "title": "Score"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance",
+          "description": "Data source information"
+        }
+      },
+      "required": [
+        "kind",
+        "option_ref",
+        "features",
+        "provenance"
+      ],
+      "title": "Choice",
+      "type": "object"
+    },
+    "ChoiceFeatures": {
+      "description": "Required features extracted from choices for fast access.",
+      "properties": {
+        "cost_usd_cents": {
+          "description": "Cost in cents",
+          "title": "Cost Usd Cents",
+          "type": "integer"
+        },
+        "travel_seconds": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Travel time in seconds",
+          "title": "Travel Seconds"
+        },
+        "indoor": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Tri-state: True=indoor, False=outdoor, None=unknown",
+          "title": "Indoor"
+        },
+        "themes": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Activity themes",
+          "title": "Themes"
+        }
+      },
+      "required": [
+        "cost_usd_cents"
+      ],
+      "title": "ChoiceFeatures",
+      "type": "object"
+    },
+    "ChoiceKind": {
+      "description": "Type of choice in a slot.",
+      "enum": [
+        "flight",
+        "lodging",
+        "attraction",
+        "transit",
+        "meal"
+      ],
+      "title": "ChoiceKind",
+      "type": "string"
+    },
+    "DayPlan": {
+      "description": "Plan for a single day.",
+      "properties": {
+        "date": {
+          "description": "Date for this day's plan",
+          "format": "date",
+          "title": "Date",
+          "type": "string"
+        },
+        "slots": {
+          "description": "Time slots for the day",
+          "items": {
+            "$ref": "#/$defs/Slot"
+          },
+          "title": "Slots",
+          "type": "array"
+        }
+      },
+      "required": [
+        "date",
+        "slots"
+      ],
+      "title": "DayPlan",
+      "type": "object"
+    },
+    "Provenance": {
+      "description": "Tracks the source and freshness of data.",
+      "properties": {
+        "source": {
+          "description": "Data source type: tool, rag, user",
+          "title": "Source",
+          "type": "string"
+        },
+        "ref_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Reference ID for the data source",
+          "title": "Ref Id"
+        },
+        "source_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "URL of the data source",
+          "title": "Source Url"
+        },
+        "fetched_at": {
+          "description": "When the data was fetched",
+          "format": "date-time",
+          "title": "Fetched At",
+          "type": "string"
+        },
+        "cache_hit": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Whether data came from cache",
+          "title": "Cache Hit"
+        },
+        "response_digest": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Hash of the response for deduplication",
+          "title": "Response Digest"
+        }
+      },
+      "required": [
+        "source",
+        "fetched_at"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    },
+    "Slot": {
+      "description": "Time slot with ranked choice alternatives.",
+      "properties": {
+        "window": {
+          "$ref": "#/$defs/TimeWindow",
+          "description": "Time window for this slot"
+        },
+        "choices": {
+          "description": "Ranked alternatives (first is selected)",
+          "items": {
+            "$ref": "#/$defs/Choice"
+          },
+          "title": "Choices",
+          "type": "array"
+        },
+        "locked": {
+          "default": false,
+          "description": "Whether this slot is user-locked",
+          "title": "Locked",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "window",
+        "choices"
+      ],
+      "title": "Slot",
+      "type": "object"
+    },
+    "TimeWindow": {
+      "description": "Time window in local time.",
+      "properties": {
+        "start": {
+          "description": "Start time in local time",
+          "format": "time",
+          "title": "Start",
+          "type": "string"
+        },
+        "end": {
+          "description": "End time in local time",
+          "format": "time",
+          "title": "End",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "title": "TimeWindow",
+      "type": "object"
+    }
+  },
+  "description": "Generated travel plan.",
+  "properties": {
+    "days": {
+      "description": "Daily plans",
+      "items": {
+        "$ref": "#/$defs/DayPlan"
+      },
+      "title": "Days",
+      "type": "array"
+    },
+    "assumptions": {
+      "$ref": "#/$defs/Assumptions",
+      "description": "Planning assumptions"
+    },
+    "rng_seed": {
+      "description": "Random seed for reproducibility",
+      "title": "Rng Seed",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "days",
+    "assumptions",
+    "rng_seed"
+  ],
+  "title": "PlanV1",
+  "type": "object"
+}
