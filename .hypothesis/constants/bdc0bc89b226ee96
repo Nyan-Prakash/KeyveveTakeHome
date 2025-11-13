@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/db/models/idempotency.py
+# hypothesis_version: 6.147.0
+
+['idempotency', 'idx_idempotency_ttl', "status = 'completed'", 'ttl_until']

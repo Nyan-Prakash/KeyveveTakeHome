@@ -23,6 +23,7 @@ def generate_non_overlapping_slots(
     """Generate non-overlapping slots with fixed seed for reproducibility."""
     if seed is not None:
         import random
+
         random.seed(seed)
 
     slots = []
@@ -208,8 +209,12 @@ class TestNonOverlapProperty:
             current = sorted_slots[i]
             next_slot = sorted_slots[i + 1]
 
-            current_end_minutes = current.window.end.hour * 60 + current.window.end.minute
-            next_start_minutes = next_slot.window.start.hour * 60 + next_slot.window.start.minute
+            current_end_minutes = (
+                current.window.end.hour * 60 + current.window.end.minute
+            )
+            next_start_minutes = (
+                next_slot.window.start.hour * 60 + next_slot.window.start.minute
+            )
 
             gap_minutes = next_start_minutes - current_end_minutes
             gaps.append(gap_minutes)

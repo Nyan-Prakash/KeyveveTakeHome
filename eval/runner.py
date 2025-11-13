@@ -241,11 +241,14 @@ def run_evaluation() -> int:
             if "budget_fail" in scenario_id:
                 # For budget fail scenarios, we expect the budget predicate to fail
                 budget_predicates = [
-                    desc for desc in results.keys()
+                    desc
+                    for desc in results.keys()
                     if "budget" in desc.lower() and "exceed" in desc.lower()
                 ]
                 if budget_predicates:
-                    scenario_passed = results[budget_predicates[0]]  # Should be True (exceeds budget)
+                    scenario_passed = results[
+                        budget_predicates[0]
+                    ]  # Should be True (exceeds budget)
 
             if scenario_passed:
                 passed_scenarios += 1

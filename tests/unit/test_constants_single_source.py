@@ -156,14 +156,15 @@ class TestNoDuplicatedLiterals:
 
         # Some literals are OK to duplicate (like common values)
         allowed_duplicates = {
-            15,   # Common buffer/timeout value
-            24,   # Hours in day
+            15,  # Common buffer/timeout value
+            24,  # Hours in day
             120,  # Common buffer value
-            1536, # Embedding dimension (if used)
+            1536,  # Embedding dimension (if used)
         }
 
         problematic_duplicates = {
-            lit: count for lit, count in duplicated.items()
+            lit: count
+            for lit, count in duplicated.items()
             if lit not in allowed_duplicates
         }
 
@@ -184,18 +185,18 @@ class TestNoDuplicatedLiterals:
 
         # Buffer values should be reasonable
         assert 60 <= settings.airport_buffer_min <= 180  # 1-3 hours
-        assert 5 <= settings.transit_buffer_min <= 60    # 5min-1hour
+        assert 5 <= settings.transit_buffer_min <= 60  # 5min-1hour
 
         # Timeout values should be reasonable
-        assert 1 <= settings.soft_timeout_s <= 5         # 1-5 seconds
-        assert 2 <= settings.hard_timeout_s <= 10        # 2-10 seconds
+        assert 1 <= settings.soft_timeout_s <= 5  # 1-5 seconds
+        assert 2 <= settings.hard_timeout_s <= 10  # 2-10 seconds
         assert settings.hard_timeout_s >= settings.soft_timeout_s
 
         # TTL values should be reasonable
-        assert 1 <= settings.fx_ttl_hours <= 168         # 1 hour to 1 week
-        assert 1 <= settings.weather_ttl_hours <= 168    # 1 hour to 1 week
+        assert 1 <= settings.fx_ttl_hours <= 168  # 1 hour to 1 week
+        assert 1 <= settings.weather_ttl_hours <= 168  # 1 hour to 1 week
 
         # Performance budgets should be reasonable
-        assert 100 <= settings.ttfe_budget_ms <= 2000    # 100ms to 2s
-        assert 1 <= settings.e2e_p50_budget_s <= 30      # 1-30 seconds
-        assert 5 <= settings.e2e_p95_budget_s <= 60      # 5-60 seconds
+        assert 100 <= settings.ttfe_budget_ms <= 2000  # 100ms to 2s
+        assert 1 <= settings.e2e_p50_budget_s <= 30  # 1-30 seconds
+        assert 5 <= settings.e2e_p95_budget_s <= 60  # 5-60 seconds

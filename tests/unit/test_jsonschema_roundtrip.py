@@ -245,7 +245,9 @@ class TestJSONSchemaRoundtrip:
         itinerary_dict = itinerary.model_dump()
 
         # Mutate required field to wrong type
-        itinerary_dict["cost_breakdown"]["total_usd_cents"] = "not_a_number"  # Should be int
+        itinerary_dict["cost_breakdown"][
+            "total_usd_cents"
+        ] = "not_a_number"  # Should be int
 
         with pytest.raises(ValidationError):  # Should fail validation
             ItineraryV1.model_validate(itinerary_dict)

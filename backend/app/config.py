@@ -1,6 +1,5 @@
 """Application configuration and settings."""
 
-
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -29,17 +28,16 @@ class Settings(BaseSettings):
     # JWT Configuration
     jwt_private_key_pem: str = Field(
         default="dummy-private-key-for-tests",
-        description="RSA private key for JWT signing (PEM format)"
+        description="RSA private key for JWT signing (PEM format)",
     )
     jwt_public_key_pem: str = Field(
         default="dummy-public-key-for-tests",
-        description="RSA public key for JWT verification (PEM format)"
+        description="RSA public key for JWT verification (PEM format)",
     )
 
     # External APIs
     weather_api_key: str = Field(
-        default="dummy-weather-api-key-for-tests",
-        description="OpenWeatherMap API key"
+        default="dummy-weather-api-key-for-tests", description="OpenWeatherMap API key"
     )
 
     # Performance Settings

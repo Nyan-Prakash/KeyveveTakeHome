@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/db/models/refresh_token.py
+# hypothesis_version: 6.147.0
+
+['CASCADE', 'User', 'idx_refresh_user', 'refresh_token', 'refresh_tokens', 'revoked', 'user.user_id', 'user_id']

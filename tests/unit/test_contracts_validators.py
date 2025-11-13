@@ -36,7 +36,9 @@ class TestDateWindowValidation:
 
     def test_reversed_date_window_fails(self):
         """Reversed date window should raise validation error."""
-        with pytest.raises(ValidationError, match="End date must be on or after start date"):
+        with pytest.raises(
+            ValidationError, match="End date must be on or after start date"
+        ):
             DateWindow(
                 start=date(2025, 6, 5),
                 end=date(2025, 6, 1),  # Before start
@@ -65,7 +67,9 @@ class TestIntentV1Validation:
 
     def test_empty_airports_fails(self):
         """Empty airports list should raise validation error."""
-        with pytest.raises(ValidationError, match="At least one airport must be provided"):
+        with pytest.raises(
+            ValidationError, match="At least one airport must be provided"
+        ):
             IntentV1(
                 city="Paris",
                 date_window=DateWindow(
@@ -131,7 +135,9 @@ class TestSlotValidation:
 
     def test_empty_choices_fails(self):
         """Empty choices list should raise validation error."""
-        with pytest.raises(ValidationError, match="At least one choice must be provided"):
+        with pytest.raises(
+            ValidationError, match="At least one choice must be provided"
+        ):
             Slot(
                 window=TimeWindow(start=time(10, 0), end=time(12, 0)),
                 choices=[],  # Empty
@@ -177,7 +183,9 @@ class TestDayPlanValidation:
             choices=[self._create_choice("choice1")],
         )
         slot2 = Slot(
-            window=TimeWindow(start=time(12, 0), end=time(14, 0)),  # Starts at 12:00 - overlap!
+            window=TimeWindow(
+                start=time(12, 0), end=time(14, 0)
+            ),  # Starts at 12:00 - overlap!
             choices=[self._create_choice("choice2")],
         )
 
@@ -194,7 +202,9 @@ class TestDayPlanValidation:
             choices=[self._create_choice("choice1")],
         )
         slot2 = Slot(
-            window=TimeWindow(start=time(12, 0), end=time(14, 0)),  # Starts when first ends
+            window=TimeWindow(
+                start=time(12, 0), end=time(14, 0)
+            ),  # Starts when first ends
             choices=[self._create_choice("choice2")],
         )
 
@@ -234,8 +244,7 @@ class TestPlanV1Validation:
 
         # Test with 5 days (within range)
         days = [
-            self._create_minimal_day_plan(date(2025, 6, day))
-            for day in range(1, 6)
+            self._create_minimal_day_plan(date(2025, 6, day)) for day in range(1, 6)
         ]
 
         plan = PlanV1(
@@ -254,8 +263,7 @@ class TestPlanV1Validation:
 
         # Test with 3 days (too few)
         days = [
-            self._create_minimal_day_plan(date(2025, 6, day))
-            for day in range(1, 4)
+            self._create_minimal_day_plan(date(2025, 6, day)) for day in range(1, 4)
         ]
 
         with pytest.raises(ValidationError, match="Plan must have 4-7 days"):
@@ -274,8 +282,7 @@ class TestPlanV1Validation:
 
         # Test with 8 days (too many)
         days = [
-            self._create_minimal_day_plan(date(2025, 6, day))
-            for day in range(1, 9)
+            self._create_minimal_day_plan(date(2025, 6, day)) for day in range(1, 9)
         ]
 
         with pytest.raises(ValidationError, match="Plan must have 4-7 days"):
