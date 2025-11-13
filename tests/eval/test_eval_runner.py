@@ -87,6 +87,7 @@ class TestEvalRunner:
 
         # Try to load the YAML (basic validation)
         import yaml
+
         with open(scenarios_path) as f:
             data = yaml.safe_load(f)
 
@@ -123,13 +124,11 @@ class TestEvalRunner:
 
         # Should return 0 for success or 1 for some failures
         # (For our stub scenarios, we expect success)
-        assert result.returncode in [0, 1], (
-            f"Unexpected exit code: {result.returncode}"
-        )
+        assert result.returncode in [0, 1], f"Unexpected exit code: {result.returncode}"
 
         # If exit code is 1, there should be failure indicators in output
         if result.returncode == 1:
             output = result.stdout + result.stderr
-            assert ("FAIL" in output or "❌" in output or "failed" in output), (
-                "Exit code 1 but no failure indicators in output"
-            )
+            assert (
+                "FAIL" in output or "❌" in output or "failed" in output
+            ), "Exit code 1 but no failure indicators in output"

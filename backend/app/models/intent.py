@@ -36,8 +36,12 @@ class LockedSlot(BaseModel):
 class Preferences(BaseModel):
     """User preferences for trip planning."""
 
-    kid_friendly: bool = Field(default=False, description="Whether trip is kid-friendly")
-    themes: list[str] = Field(default=[], description="Preferred themes (art, food, etc)")
+    kid_friendly: bool = Field(
+        default=False, description="Whether trip is kid-friendly"
+    )
+    themes: list[str] = Field(
+        default=[], description="Preferred themes (art, food, etc)"
+    )
     avoid_overnight: bool = Field(default=False, description="Avoid red-eye flights")
     locked_slots: list[LockedSlot] = Field(
         default=[], description="User-pinned activities"

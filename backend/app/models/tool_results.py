@@ -54,7 +54,8 @@ class Attraction(BaseModel):
         default=None, description="Tri-state: True=indoor, False=outdoor, None=unknown"
     )
     kid_friendly: bool | None = Field(
-        default=None, description="Tri-state: True=kid-friendly, False=not, None=unknown"
+        default=None,
+        description="Tri-state: True=kid-friendly, False=not, None=unknown",
     )
     opening_hours: dict[str, list[Window]] = Field(
         description="Opening hours keyed by weekday '0'-'6' (Monday=0)"

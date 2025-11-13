@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/db/models/agent_run.py
+# hypothesis_version: 6.147.0
+
+['CASCADE', 'Itinerary', 'Org', 'User', 'agent_run', 'agent_runs', 'created_at', 'idx_run_org_user', 'org.org_id', 'org_id', 'user.user_id', 'user_id']

@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/db/models/user.py
+# hypothesis_version: 6.147.0
+
+['AgentRun', 'CASCADE', 'Itinerary', 'Org', 'RefreshToken', 'all, delete-orphan', 'email', 'idx_user_org', 'org.org_id', 'org_id', 'uq_user_org_email', 'user', 'users']

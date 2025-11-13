@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/limits/rate_limit.py
+# hypothesis_version: 6.147.0
+
+[60.0, 120, 'agent', 'crud', 'last_refill', 'tokens']

@@ -73,9 +73,7 @@ class Provenance(BaseModel):
     ref_id: str | None = Field(
         default=None, description="Reference ID for the data source"
     )
-    source_url: str | None = Field(
-        default=None, description="URL of the data source"
-    )
+    source_url: str | None = Field(default=None, description="URL of the data source")
     fetched_at: datetime = Field(description="When the data was fetched")
     cache_hit: bool | None = Field(
         default=None, description="Whether data came from cache"
