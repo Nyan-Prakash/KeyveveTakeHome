@@ -41,6 +41,10 @@ class Settings(BaseSettings):
         default="dummy-weather-api-key-for-tests",
         description="OpenWeatherMap API key"
     )
+    healthcheck_url: str = Field(
+        default="https://www.google.com",
+        description="URL to check for outbound HTTP connectivity"
+    )
 
     # Performance Settings
     fanout_cap: int = Field(default=4, description="Max concurrent branches in planner")

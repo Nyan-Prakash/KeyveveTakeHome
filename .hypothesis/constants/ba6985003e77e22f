@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt1/KeyveveTakeHome/backend/app/metrics/core.py
+# hypothesis_version: 6.147.0
+
+['cost_usd_cents', 'error_kind', 'from_cache', 'latency_ms', 'ok', 'retries', 'tokens_in', 'tokens_out', 'tool', 'tool_call_metric']
