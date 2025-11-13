@@ -20,6 +20,9 @@ Requires-Dist: types-python-dateutil
 Requires-Dist: hypothesis>=6.88.0
 Requires-Dist: pyyaml>=6.0.1
 Requires-Dist: python-dateutil>=2.8.0
+Requires-Dist: sqlalchemy>=2.0.0
+Requires-Dist: alembic>=1.13.0
+Requires-Dist: psycopg2-binary>=2.9.0
 Provides-Extra: dev
 Requires-Dist: pre-commit>=3.5.0; extra == "dev"
 Requires-Dist: pytest-cov>=4.1.0; extra == "dev"
@@ -27,21 +30,30 @@ Requires-Dist: pytest-xdist>=3.3.0; extra == "dev"
 
 # Keyveve Travel Planner - Take Home Implementation
 
-An agentic travel planner that generates 4–7 day itineraries with multi-constraint verification and deterministic repair. This is the PR-1 implementation focusing on contracts, typed settings, evaluation skeleton, and CI infrastructure.
+An agentic travel planner that generates 4–7 day itineraries with multi-constraint verification and deterministic repair. This implementation includes PR-1 (contracts, settings, evaluation) and PR-2 (database models, migrations, multi-tenancy, rate limiting).
 
 ## 🏗️ Architecture Overview
 
-This implementation follows the specification outlined in `Docs/SPEC.md`. The current PR-1 includes:
+This implementation follows the specification outlined in `Docs/SPEC.md`. Current implementation includes:
 
+**PR-1: Foundation**
 - **Typed Models**: Pydantic v2 models with validation for all data contracts
 - **Configuration Management**: Single source of truth for all settings
 - **Evaluation Framework**: YAML-driven scenario testing with stub implementations
 - **CI/CD Pipeline**: Automated testing with ruff, black, mypy, and pytest
 - **Schema Export**: JSON Schema generation for API contracts
 
+**PR-2: Database & Infrastructure**
+- **SQLAlchemy ORM**: Database models with multi-tenancy patterns
+- **Alembic Migrations**: Schema versioning and management
+- **Idempotency Keys**: Request deduplication infrastructure
+- **Rate Limiting**: Core rate limiting logic (in-memory)
+- **Dev Tooling**: Database seeding and test fixtures
+
 ## 📋 Requirements
 
 - Python 3.11+
+- PostgreSQL 13+ (for database features)
 - Dependencies managed via `pyproject.toml`
 
 ## 🚀 Quick Start
@@ -84,13 +96,35 @@ python scripts/export_schemas.py
 cd eval && python runner.py
 ```
 
+### Database Setup (PR-2)
+
+```bash
+# Run database migrations
+alembic upgrade head
+
+# Seed development data
+python scripts/dev_seed.py
+
+# Downgrade migrations (if needed)
+alembic downgrade base
+
+# Create a new migration
+alembic revision --autogenerate -m "description"
+```
+
+The database setup includes:
+- **SQLAlchemy ORM models** with multi-tenancy support
+- **Alembic migrations** for schema versioning
+- **Idempotency keys** for request deduplication
+- **Rate limiting** core infrastructure
+
 ## 📁 Project Structure
 
 ```
 backend/
   app/
     config.py              # Application settings (single source of truth)
-    models/
+    models/                # Pydantic models (contracts)
       __init__.py          # Convenient re-exports
       common.py            # Shared types, enums, Provenance
       intent.py            # IntentV1, DateWindow, Preferences
@@ -98,6 +132,25 @@ backend/
       tool_results.py      # FlightOption, Lodging, Attraction, etc.
       violations.py        # Violation tracking
       itinerary.py         # ItineraryV1 final output
+    db/                    # Database layer (PR-2)
+      base.py              # SQLAlchemy base and engine setup
+      session.py           # Centralized session management
+      mixins.py            # TimestampMixin, OrgScopedMixin
+      models/              # ORM models
+        org.py             # Organization model
+        user.py            # User model
+        auth.py            # RefreshToken model
+        destination.py     # Destination model
+        knowledge.py       # KnowledgeItem, Embedding models
+        agent_run.py       # AgentRun tracking model
+        itinerary.py       # Itinerary storage model
+        idempotency.py     # IdempotencyKey model
+      migrations/          # Alembic migrations
+        env.py             # Alembic environment
+        versions/          # Migration versions
+    rate_limit/            # Rate limiting (PR-2)
+      types.py             # RateLimitResult type
+      core.py              # RateLimiter protocol and implementations
 
 docs/
   SPEC.md                  # Complete system specification
@@ -109,6 +162,7 @@ eval/
 
 scripts/
   export_schemas.py        # JSON schema generation
+  dev_seed.py              # Development database seeding (PR-2)
 
 tests/
   unit/
@@ -117,9 +171,16 @@ tests/
     test_jsonschema_roundtrip.py    # Schema validation tests
     test_constants_single_source.py # Settings accessibility tests
     test_nonoverlap_property.py     # Property-based slot tests
+    test_rate_limiter.py            # Rate limiter tests (PR-2)
+  db/                                # Database tests (PR-2)
+    test_migrations.py              # Alembic migration tests
+    test_tenancy_schema.py          # Multi-tenancy enforcement tests
+    test_idempotency_schema.py      # Idempotency key tests
+    test_dev_seed.py                # Seed script tests
   eval/
     test_eval_runner.py             # Evaluation framework tests
 
+alembic.ini                # Alembic configuration (PR-2)
 .github/workflows/ci.yml   # CI pipeline
 .env.example              # Environment template
 pyproject.toml            # Dependencies and tool config
@@ -260,16 +321,24 @@ Stores UTC datetime + separate IANA timezone field for DST handling and historic
 ### ADR-004: Pydantic v2 Validation
 Leverages Pydantic's built-in validators and field validation for contract enforcement.
 
-## 🚧 Current Limitations (PR-1 Scope)
+## 🚧 Current Status (PR-1 + PR-2)
 
-This PR implements the foundational contracts and evaluation skeleton. **Not included**:
+**Implemented**:
+- ✅ Pydantic data models and contracts (PR-1)
+- ✅ Configuration management and settings (PR-1)
+- ✅ Evaluation framework with YAML scenarios (PR-1)
+- ✅ SQLAlchemy ORM models with multi-tenancy (PR-2)
+- ✅ Alembic database migrations (PR-2)
+- ✅ Idempotency key infrastructure (PR-2)
+- ✅ Rate limiting core (in-memory) (PR-2)
+- ✅ Development database seeding (PR-2)
 
+**Not yet implemented**:
 - HTTP API endpoints (FastAPI)
-- Database models (SQLAlchemy)
 - Tool adapters (weather, flights, etc.)
 - LangGraph orchestration
-- Authentication/authorization
-- Redis caching
+- Authentication/authorization endpoints
+- Redis-backed rate limiting
 - SSE streaming
 
 These components will be added in subsequent PRs following the phased implementation plan.
@@ -298,11 +367,12 @@ pytest tests/unit/test_tri_state_serialization.py -v
 
 ## 📚 Next Steps
 
-1. **PR-2**: FastAPI endpoints and middleware
-2. **PR-3**: Database models and migrations  
-3. **PR-4**: Tool adapters and external API integration
-4. **PR-5**: LangGraph orchestration and business logic
-5. **PR-6**: Authentication, caching, and production features
+1. ✅ **PR-1**: Contracts, settings, evaluation framework (Complete)
+2. ✅ **PR-2**: Database models, migrations, rate limiting (Complete)
+3. **PR-3**: FastAPI endpoints and middleware
+4. **PR-4**: Tool adapters and external API integration
+5. **PR-5**: LangGraph orchestration and business logic
+6. **PR-6**: Authentication, caching, and production features
 
 ## 🤝 Contributing
 

@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt1/KeyveveTakeHome/backend/app/db/models/knowledge.py
+# hypothesis_version: 6.147.0
+
+[255, 'destination_id', 'embeddings', 'knowledge_item_id', 'knowledge_items', 'org_id']

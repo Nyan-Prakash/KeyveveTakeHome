@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt1/KeyveveTakeHome/backend/app/db/models/itinerary.py
+# hypothesis_version: 6.147.0
+
+['agent_run_id', 'itineraries', 'org_id']

@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt1/KeyveveTakeHome/backend/app/db/models/idempotency.py
+# hypothesis_version: 6.147.0
+
+[255, 'idempotency_keys', 'key', 'ttl_until', 'user_id']
