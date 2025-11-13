@@ -1,0 +1,280 @@
+"""LangGraph nodes with fake/stub implementations for PR4."""
+
+import random
+from datetime import UTC, datetime, time, timedelta
+
+from backend.app.models.common import ChoiceKind, Geo, Provenance, TimeWindow
+from backend.app.models.itinerary import (
+    Activity,
+    Citation,
+    CostBreakdown,
+    DayItinerary,
+    Decision,
+    ItineraryV1,
+)
+from backend.app.models.plan import (
+    Assumptions,
+    Choice,
+    ChoiceFeatures,
+    DayPlan,
+    PlanV1,
+    Slot,
+)
+
+from .state import OrchestratorState
+
+
+def intent_node(state: OrchestratorState) -> OrchestratorState:
+    """Process and normalize the user intent.
+
+    In PR4, this is a simple pass-through that logs the intent.
+    Real intent processing will be added in later PRs.
+    """
+    state.messages.append("Processing intent...")
+    state.last_event_ts = datetime.now(UTC)
+    return state
+
+
+def planner_node(state: OrchestratorState) -> OrchestratorState:
+    """Generate a simple plan based on the intent.
+
+    In PR4, this generates a trivial 5-day plan with 2 slots per day.
+    Real planning logic will be added in later PRs.
+    """
+    state.messages.append("Planning itinerary...")
+    state.last_event_ts = datetime.now(UTC)
+
+    rng = random.Random(state.seed)
+
+    # Create a simple 5-day plan
+    start_date = state.intent.date_window.start
+    days: list[DayPlan] = []
+
+    for day_offset in range(5):
+        current_date = start_date + timedelta(days=day_offset)
+
+        # Create 2 slots per day: morning and afternoon
+        slots = [
+            Slot(
+                window=TimeWindow(start=time(9, 0), end=time(12, 0)),
+                choices=[
+                    Choice(
+                        kind=ChoiceKind.attraction,
+                        option_ref=f"attraction_{day_offset}_morning",
+                        features=ChoiceFeatures(
+                            cost_usd_cents=rng.randint(1000, 5000),
+                            travel_seconds=1800,
+                            indoor=rng.choice([True, False, None]),
+                            themes=["culture", "art"],
+                        ),
+                        score=0.85,
+                        provenance=Provenance(
+                            source="fake",
+                            fetched_at=datetime.now(UTC),
+                            cache_hit=False,
+                        ),
+                    )
+                ],
+                locked=False,
+            ),
+            Slot(
+                window=TimeWindow(start=time(14, 0), end=time(18, 0)),
+                choices=[
+                    Choice(
+                        kind=ChoiceKind.attraction,
+                        option_ref=f"attraction_{day_offset}_afternoon",
+                        features=ChoiceFeatures(
+                            cost_usd_cents=rng.randint(1000, 5000),
+                            travel_seconds=1800,
+                            indoor=rng.choice([True, False, None]),
+                            themes=["food", "nature"],
+                        ),
+                        score=0.80,
+                        provenance=Provenance(
+                            source="fake",
+                            fetched_at=datetime.now(UTC),
+                            cache_hit=False,
+                        ),
+                    )
+                ],
+                locked=False,
+            ),
+        ]
+
+        days.append(DayPlan(date=current_date, slots=slots))
+
+    state.plan = PlanV1(
+        days=days,
+        assumptions=Assumptions(
+            fx_rate_usd_eur=0.92,
+            daily_spend_est_cents=10000,
+            transit_buffer_minutes=15,
+            airport_buffer_minutes=120,
+        ),
+        rng_seed=state.seed,
+    )
+    state.messages.append("Plan generated with 5 days and 10 slots")
+    state.last_event_ts = datetime.now(UTC)
+    return state
+
+
+def selector_node(state: OrchestratorState) -> OrchestratorState:
+    """Select which plan step to execute.
+
+    In PR4, this is a simple acceptance of the plan without real ranking.
+    Real selector logic will be added in later PRs.
+    """
+    state.messages.append("Selecting plan options...")
+    state.last_event_ts = datetime.now(UTC)
+    # In PR4, we just accept the plan as-is
+    state.messages.append("All plan options accepted")
+    state.last_event_ts = datetime.now(UTC)
+    return state
+
+
+def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
+    """Execute tools to gather data.
+
+    In PR4, this calls fake tools that return static data.
+    Real tool execution will use the PR3 ToolExecutor in later PRs.
+    """
+    state.messages.append("Executing tools...")
+    state.last_event_ts = datetime.now(UTC)
+
+    # Fake tool execution - just sleep briefly to simulate work
+    state.messages.append("Weather tool: sunny forecast for all days")
+    state.messages.append("Currency tool: USD to EUR = 0.92")
+    state.last_event_ts = datetime.now(UTC)
+    return state
+
+
+def verifier_node(state: OrchestratorState) -> OrchestratorState:
+    """Verify plan constraints.
+
+    In PR4, this always returns no violations.
+    Real verification logic will be added in later PRs.
+    """
+    state.messages.append("Verifying plan constraints...")
+    state.last_event_ts = datetime.now(UTC)
+
+    # In PR4, trivial check: budget must be less than 1 billion cents
+    if state.intent.budget_usd_cents > 100_000_000_00:
+        from backend.app.models.common import ViolationKind
+
+        state.violations.append(
+            {
+                "kind": ViolationKind.budget_exceeded,
+                "node_ref": "verifier",
+                "details": {"reason": "Budget exceeds $1 billion"},
+                "blocking": True,
+            }  # type: ignore[arg-type]
+        )
+    else:
+        state.messages.append("No violations detected")
+
+    state.last_event_ts = datetime.now(UTC)
+    return state
+
+
+def repair_node(state: OrchestratorState) -> OrchestratorState:
+    """Repair plan violations.
+
+    In PR4, this is a no-op pass-through.
+    Real repair logic will be added in later PRs.
+    """
+    state.messages.append("Checking for repairs...")
+    state.last_event_ts = datetime.now(UTC)
+
+    if state.violations:
+        state.messages.append(f"Would repair {len(state.violations)} violations")
+    else:
+        state.messages.append("No repairs needed")
+
+    state.last_event_ts = datetime.now(UTC)
+    return state
+
+
+def synth_node(state: OrchestratorState) -> OrchestratorState:
+    """Synthesize final itinerary from plan.
+
+    In PR4, this builds a trivial itinerary from the plan.
+    Real synthesis logic will be added in later PRs.
+    """
+    state.messages.append("Synthesizing itinerary...")
+    state.last_event_ts = datetime.now(UTC)
+
+    if not state.plan:
+        state.messages.append("No plan to synthesize")
+        return state
+
+    # Build itinerary from plan
+    days: list[DayItinerary] = []
+    total_cost = 0
+
+    for day_plan in state.plan.days:
+        activities: list[Activity] = []
+        for slot in day_plan.slots:
+            choice = slot.choices[0]  # Take first choice
+            total_cost += choice.features.cost_usd_cents
+            activities.append(
+                Activity(
+                    window=slot.window,
+                    kind=choice.kind,
+                    name=f"Fake {choice.kind.value} activity",
+                    geo=Geo(lat=48.8566, lon=2.3522),  # Paris coordinates
+                    notes=f"Score: {choice.score}",
+                    locked=slot.locked,
+                )
+            )
+
+        days.append(DayItinerary(day_date=day_plan.date, activities=activities))
+
+    state.itinerary = ItineraryV1(
+        itinerary_id=state.trace_id,
+        intent=state.intent,
+        days=days,
+        cost_breakdown=CostBreakdown(
+            flights_usd_cents=50000,
+            lodging_usd_cents=30000,
+            attractions_usd_cents=total_cost,
+            transit_usd_cents=5000,
+            daily_spend_usd_cents=10000 * len(days),
+            total_usd_cents=50000 + 30000 + total_cost + 5000 + (10000 * len(days)),
+            currency_disclaimer="Exchange rates are approximate and may vary.",
+        ),
+        decisions=[
+            Decision(
+                node="planner",
+                rationale="Generated simple 5-day itinerary",
+                alternatives_considered=1,
+                selected="plan_v1",
+            )
+        ],
+        citations=[
+            Citation(
+                claim="Weather forecast",
+                provenance=Provenance(source="fake", fetched_at=datetime.now(UTC)),
+            )
+        ],
+        created_at=datetime.now(UTC),
+        trace_id=state.trace_id,
+    )
+
+    state.messages.append("Itinerary synthesized successfully")
+    state.last_event_ts = datetime.now(UTC)
+    return state
+
+
+def responder_node(state: OrchestratorState) -> OrchestratorState:
+    """Finalize and mark run as complete.
+
+    This is the terminal node that marks the run as done.
+    """
+    state.messages.append("Finalizing itinerary...")
+    state.last_event_ts = datetime.now(UTC)
+
+    state.done = True
+    state.messages.append("Run completed successfully")
+    state.last_event_ts = datetime.now(UTC)
+
+    return state
