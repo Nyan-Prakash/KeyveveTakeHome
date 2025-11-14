@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/adapters/flights.py
+# hypothesis_version: 6.147.0
+
+[7.25, 7.5, 7.75, 8.25, 8.5, 9.25, 9.5, 10.0, 10.5, 11.0, 11.5, 100, 650, 670, 720, 750, 780, 800, 820, 850, 880, 920, 950, 980, 1050, 3600, 'CDG', 'JFK', 'LHR', 'NRT', 'SEA', 'SFO', 'arrival', 'departure', 'departure_date', 'departure_offset_h', 'dest', 'destination', 'duration_h', 'duration_seconds', 'fixture://flights', 'flight_id', 'flights', 'origin', 'overnight', 'price_usd', 'price_usd_cents', 'success', 'tool']

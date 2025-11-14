@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/features/mapper.py
+# hypothesis_version: 6.147.0
+
+[250, 300, 500, 2000, 'art', 'bus', 'culture', 'education', 'historical', 'kid_friendly', 'metro', 'museum', 'nature', 'num_nights', 'other', 'outdoor', 'park', 'relaxation', 'spiritual', 'taxi', 'temple', 'transport', 'walk']

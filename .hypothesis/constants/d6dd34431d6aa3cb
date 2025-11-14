@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/adapters/fx.py
+# hypothesis_version: 6.147.0
+
+[0.79, 0.92, 1.0, 1.36, 1.53, 149.5, 3600, 'AUD', 'CAD', 'EUR', 'GBP', 'JPY', 'USD', 'breaker_open', 'fixture://fx', 'from_currency', 'fx', 'rate', 'success', 'to_currency', 'tool']

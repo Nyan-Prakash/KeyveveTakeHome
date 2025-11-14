@@ -20,6 +20,12 @@ Requires-Dist: types-python-dateutil
 Requires-Dist: hypothesis>=6.88.0
 Requires-Dist: pyyaml>=6.0.1
 Requires-Dist: python-dateutil>=2.8.0
+Requires-Dist: sqlalchemy>=2.0.0
+Requires-Dist: alembic>=1.12.0
+Requires-Dist: psycopg2-binary>=2.9.0
+Requires-Dist: pgvector>=0.2.0
+Requires-Dist: redis>=5.0.0
+Requires-Dist: httpx>=0.25.0
 Provides-Extra: dev
 Requires-Dist: pre-commit>=3.5.0; extra == "dev"
 Requires-Dist: pytest-cov>=4.1.0; extra == "dev"

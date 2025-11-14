@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/adapters/transit.py
+# hypothesis_version: 6.147.0
+
+[5.0, 20.0, 30.0, 35.0, 6371.0, 3600, 'duration_seconds', 'fixture://transit', 'from_geo', 'last_departure', 'lat', 'leg_id', 'lon', 'mode', 'modes', 'success', 'to_geo', 'tool', 'transit']

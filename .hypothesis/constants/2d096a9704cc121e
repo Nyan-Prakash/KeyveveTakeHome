@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/adapters/lodging.py
+# hypothesis_version: 6.147.0
+
+[-0.134, -0.1278, -0.1257, 2.2945, 2.3288, 2.3522, 35.6762, 35.6852, 35.6895, 48.8566, 48.8584, 48.8698, 51.5074, 51.5085, 51.5094, 139.6503, 139.6917, 139.7528, 100, 140, 150, 180, 350, 450, 500, 'CDG-BUDGET-1', 'CDG-LUXURY-1', 'CDG-MID-1', 'Cozy Inn Central', 'Eiffel Charm Hotel', 'LHR-BUDGET-1', 'LHR-LUXURY-1', 'LHR-MID-1', 'Le Grand Hotel', 'Montmartre Hostel', 'NRT-BUDGET-1', 'NRT-LUXURY-1', 'NRT-MID-1', 'Royal Palace Suites', 'Shibuya Capsule Inn', 'Thames View Hotel', 'budget', 'city', 'fixture://lodging', 'geo', 'id', 'kid_friendly', 'lat', 'lodging', 'lodging_id', 'lon', 'london', 'luxury', 'mid', 'name', 'paris', 'price_per_night', 'success', 'tier', 'tokyo', 'tool']
