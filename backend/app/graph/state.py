@@ -26,6 +26,9 @@ class OrchestratorState(BaseModel):
     seed: int = Field(description="Random seed for deterministic behavior")
     intent: IntentV1 = Field(description="Original user intent")
     plan: PlanV1 | None = Field(default=None, description="Generated plan")
+    candidate_plans: list[PlanV1] = Field(
+        default_factory=list, description="All candidate plans from planner"
+    )
     itinerary: ItineraryV1 | None = Field(
         default=None, description="Final itinerary output"
     )

@@ -1,8 +1,13 @@
-"""LangGraph nodes with fake/stub implementations for PR4."""
+"""LangGraph nodes implementing PR6 planner and selector logic."""
 
 import random
 from datetime import UTC, datetime, time, timedelta
 
+from backend.app.adapters.feature_mapper import (
+    map_attraction_to_features,
+    map_flight_to_features,
+    map_lodging_to_features,
+)
 from backend.app.models.common import ChoiceKind, Geo, Provenance, TimeWindow
 from backend.app.models.itinerary import (
     Activity,
@@ -20,6 +25,8 @@ from backend.app.models.plan import (
     PlanV1,
     Slot,
 )
+from backend.app.planning import build_candidate_plans, score_branches
+from backend.app.planning.types import BranchFeatures
 
 from .state import OrchestratorState
 
@@ -36,98 +43,146 @@ def intent_node(state: OrchestratorState) -> OrchestratorState:
 
 
 def planner_node(state: OrchestratorState) -> OrchestratorState:
-    """Generate a simple plan based on the intent.
+    """Generate candidate plans based on the intent using PR6 planner.
 
-    In PR4, this generates a trivial 5-day plan with 2 slots per day.
-    Real planning logic will be added in later PRs.
+    Replaces the PR4 stub implementation with real planning logic
+    that generates 1-4 candidate plans with bounded fan-out.
     """
     state.messages.append("Planning itinerary...")
     state.last_event_ts = datetime.now(UTC)
 
-    rng = random.Random(state.seed)
+    # Generate candidate plans using PR6 logic
+    candidate_plans = build_candidate_plans(state.intent)
+    
+    # For now, take the first plan as our working plan
+    # The selector will choose between alternatives in the next step
+    if candidate_plans:
+        state.plan = candidate_plans[0]
+        state.messages.append(f"Generated {len(candidate_plans)} candidate plans")
+        state.messages.append(f"Selected plan with {len(state.plan.days)} days")
+        
+        # Store all candidates in state for selector to use
+        state.candidate_plans = candidate_plans
+    else:
+        state.messages.append("Failed to generate any candidate plans")
+        # Fall back to stub plan
+        rng = random.Random(state.seed)
+        start_date = state.intent.date_window.start
+        days: list[DayPlan] = []
 
-    # Create a simple 5-day plan
-    start_date = state.intent.date_window.start
-    days: list[DayPlan] = []
+        for day_offset in range(5):
+            current_date = start_date + timedelta(days=day_offset)
 
-    for day_offset in range(5):
-        current_date = start_date + timedelta(days=day_offset)
+            # Create 2 slots per day: morning and afternoon
+            slots = [
+                Slot(
+                    window=TimeWindow(start=time(9, 0), end=time(12, 0)),
+                    choices=[
+                        Choice(
+                            kind=ChoiceKind.attraction,
+                            option_ref=f"fallback_attraction_{day_offset}_morning",
+                            features=ChoiceFeatures(
+                                cost_usd_cents=rng.randint(1000, 5000),
+                                travel_seconds=1800,
+                                indoor=rng.choice([True, False, None]),
+                                themes=["culture", "art"],
+                            ),
+                            score=0.85,
+                            provenance=Provenance(
+                                source="fallback",
+                                fetched_at=datetime.now(UTC),
+                                cache_hit=False,
+                            ),
+                        )
+                    ],
+                    locked=False,
+                ),
+                Slot(
+                    window=TimeWindow(start=time(14, 0), end=time(18, 0)),
+                    choices=[
+                        Choice(
+                            kind=ChoiceKind.attraction,
+                            option_ref=f"fallback_attraction_{day_offset}_afternoon",
+                            features=ChoiceFeatures(
+                                cost_usd_cents=rng.randint(1000, 5000),
+                                travel_seconds=1800,
+                                indoor=rng.choice([True, False, None]),
+                                themes=["food", "nature"],
+                            ),
+                            score=0.80,
+                            provenance=Provenance(
+                                source="fallback",
+                                fetched_at=datetime.now(UTC),
+                                cache_hit=False,
+                            ),
+                        )
+                    ],
+                    locked=False,
+                ),
+            ]
 
-        # Create 2 slots per day: morning and afternoon
-        slots = [
-            Slot(
-                window=TimeWindow(start=time(9, 0), end=time(12, 0)),
-                choices=[
-                    Choice(
-                        kind=ChoiceKind.attraction,
-                        option_ref=f"attraction_{day_offset}_morning",
-                        features=ChoiceFeatures(
-                            cost_usd_cents=rng.randint(1000, 5000),
-                            travel_seconds=1800,
-                            indoor=rng.choice([True, False, None]),
-                            themes=["culture", "art"],
-                        ),
-                        score=0.85,
-                        provenance=Provenance(
-                            source="fake",
-                            fetched_at=datetime.now(UTC),
-                            cache_hit=False,
-                        ),
-                    )
-                ],
-                locked=False,
+            days.append(DayPlan(date=current_date, slots=slots))
+
+        state.plan = PlanV1(
+            days=days,
+            assumptions=Assumptions(
+                fx_rate_usd_eur=0.92,
+                daily_spend_est_cents=10000,
+                transit_buffer_minutes=15,
+                airport_buffer_minutes=120,
             ),
-            Slot(
-                window=TimeWindow(start=time(14, 0), end=time(18, 0)),
-                choices=[
-                    Choice(
-                        kind=ChoiceKind.attraction,
-                        option_ref=f"attraction_{day_offset}_afternoon",
-                        features=ChoiceFeatures(
-                            cost_usd_cents=rng.randint(1000, 5000),
-                            travel_seconds=1800,
-                            indoor=rng.choice([True, False, None]),
-                            themes=["food", "nature"],
-                        ),
-                        score=0.80,
-                        provenance=Provenance(
-                            source="fake",
-                            fetched_at=datetime.now(UTC),
-                            cache_hit=False,
-                        ),
-                    )
-                ],
-                locked=False,
-            ),
-        ]
+            rng_seed=state.seed,
+        )
+        state.candidate_plans = [state.plan]
 
-        days.append(DayPlan(date=current_date, slots=slots))
-
-    state.plan = PlanV1(
-        days=days,
-        assumptions=Assumptions(
-            fx_rate_usd_eur=0.92,
-            daily_spend_est_cents=10000,
-            transit_buffer_minutes=15,
-            airport_buffer_minutes=120,
-        ),
-        rng_seed=state.seed,
-    )
-    state.messages.append("Plan generated with 5 days and 10 slots")
     state.last_event_ts = datetime.now(UTC)
     return state
 
 
 def selector_node(state: OrchestratorState) -> OrchestratorState:
-    """Select which plan step to execute.
+    """Select the best plan from candidates using PR6 selector logic.
 
-    In PR4, this is a simple acceptance of the plan without real ranking.
-    Real selector logic will be added in later PRs.
+    Uses feature-based scoring with frozen statistics to rank plans
+    and logs score vectors for chosen + top 2 discarded plans.
     """
-    state.messages.append("Selecting plan options...")
+    state.messages.append("Selecting best plan...")
     state.last_event_ts = datetime.now(UTC)
-    # In PR4, we just accept the plan as-is
-    state.messages.append("All plan options accepted")
+    
+    # Extract features from all candidate plans if available
+    if hasattr(state, 'candidate_plans') and state.candidate_plans:
+        candidates = state.candidate_plans
+    elif state.plan:
+        candidates = [state.plan]
+    else:
+        state.messages.append("No plans available for selection")
+        return state
+    
+    # Build BranchFeatures for each candidate plan
+    branch_features: list[BranchFeatures] = []
+    for plan in candidates:
+        features = []
+        for day in plan.days:
+            for slot in day.slots:
+                for choice in slot.choices:
+                    features.append(choice.features)
+        
+        branch_features.append(BranchFeatures(
+            plan=plan,
+            features=features
+        ))
+    
+    # Score branches using PR6 selector
+    scored_plans = score_branches(branch_features)
+    
+    if scored_plans:
+        # Select the highest-scored plan
+        best_plan = scored_plans[0]
+        state.plan = best_plan.plan
+        state.messages.append(f"Selected plan with score {best_plan.score:.3f}")
+        state.messages.append(f"Evaluated {len(scored_plans)} alternatives")
+    else:
+        state.messages.append("No valid scored plans available")
+    
     state.last_event_ts = datetime.now(UTC)
     return state
 
