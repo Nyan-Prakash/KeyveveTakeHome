@@ -143,6 +143,114 @@ backoff; sse tenancy test; chaos env flags (FORCE
 TOOL
 TIMEOUT, EMPTY
 RAG,
+ PR11 — Streamlit pages + RAG UX + what-if flows
+
+purpose: match the take-home’s frontend spec (Destinations, Knowledge Base, Plan) and make RAG + repair loop visible to the user.
+
+scope:
+	•	Destinations page
+	•	List destinations (org-scoped) with search + tag filters.
+	•	Add/edit destination; soft delete.
+	•	Show last agent run summary for the selected destination (status, last total_cost_usd, last run_id).  ￼
+	•	Knowledge Base page
+	•	Upload PDF/MD for a destination; call backend ingest endpoint that:
+	•	Stores knowledge_item row.
+	•	Chunks text and writes embedding rows (pgvector).
+	•	Show ingestion progress (queued → processing → done).
+	•	Preview chunk list (snippet text + created_at).
+	•	Plan page (chat-like)
+	•	Single conversational thread per destination:
+	•	First message: goals/constraints (city, budget, dates, prefs).
+	•	Subsequent messages: what-if refinements (e.g., “Make it $300 cheaper”, “If Saturday rains, swap outdoor”).
+	•	Wire to backend:
+	•	POST /plan for initial run.
+	•	POST /plan/{id}/edit for what-if edits (change budget, prefs, dates).
+	•	GET /plan/{id}/stream via SSE/WebSocket for streaming updates.
+	•	Right rail shows:
+	•	Tools used (name, count, total_ms).
+	•	Decisions (selector and repair notes).
+	•	Constraint checks / violations.
+	•	Citations list (RAG/tool provenance), aligned with the model output contract.
+	•	RAG integration in UI
+	•	Ensure the synthesizer already using RAG can:
+	•	show which knowledge_item/chunk each citation came from.
+	•	gracefully handle “empty RAG” (no chunks) without crashing; UI indicates “no local knowledge found”.
+
+“good” means:
+	•	You can run the Kyoto example from the PDF end-to-end from the Streamlit UI:
+	•	Select destination.
+	•	Upload a guide PDF.
+	•	Ask “Plan 5 days in Kyoto…” and see live progress events.
+	•	Send at least one what-if like “Make it $300 cheaper” and see a repair diff (fewer hotel costs / different airport) reflected.
+	•	Right rail shows:
+	•	≥ 90% of narrative claims have citations attached.
+	•	Tools list includes the RAG/knowledge tool when used.
+	•	The Knowledge Base page shows:
+	•	At least one document with visible chunks.
+	•	A completed ingestion run for the demo document.
+
+merge gates:
+	•	Frontend integration tests:
+	•	Plan page hits /plan then /plan/{id}/stream with valid bearer JWT; what-if hits /plan/{id}/edit.
+	•	Destinations page is org-scoped (no cross-org leakage).
+	•	Backend tests:
+	•	RAG ingest strips PII from embeddings (email/phone) as per SPEC.  ￼
+	•	Query “Eiffel Tower hours” style test retrieves the correct chunk via pgvector.
+	•	Manual checklist:
+	•	Walk through “7) Frontend (Streamlit)” bullets in the PDF and tick each one off.  ￼
+
+⸻
+
+PR12 — MCP tool + tool toggles + candidate checklist pass
+
+purpose: satisfy the “≥5 tools; 1 via MCP (or MCP-ready) with fallback” and line-up your implementation with the Candidate Checklist section of the take-home.
+
+scope:
+	•	MCP (or MCP-ready) tool
+	•	Choose one domain (e.g., Weather or Currency Rates):
+	•	Implement an MCP server exposing that tool’s JSON schema.
+	•	Implement a client in the backend that calls this MCP server.
+	•	Keep your existing local adapter as a fallback (env flag like DISABLE_MCP_WEATHER=1).  ￼
+	•	Wire the LangGraph Tool Executor so that:
+	•	Normal path → uses MCP.
+	•	If MCP unavailable / flag set → uses local adapter with the same schema.
+	•	Tool toggles & fixtures
+	•	Config layer (.env / settings) supports switching between fixtures and real APIs per tool, as described in the PDF “Switch: toggle between fixtures and real tool APIs in config.”  ￼
+	•	At least 5 tools active:
+	•	Flights (fixture OK).
+	•	Lodging (fixture OK).
+	•	Events/Attractions (fixture OK).
+	•	Transit/Travel Time (fixture/graph OK).
+	•	Weather (real API + cache) or Currency or Geocoding as MCP-backed.
+	•	Knowledge Retrieval (RAG) via pgvector.
+	•	Candidate Checklist reconciliation
+	•	Create a short docs/checklist.md with each bullet from section 13) Candidate Checklist (Quick) and a pointer to:
+	•	code path (file + function),
+	•	or a note “not implemented” (if any — but goal is all implemented).  ￼
+	•	Ensure:
+	•	Mono-repo structure backend/, frontend/, infrastructure/ exists and matches PDF.
+	•	LangGraph has typed state, conditionals, parallelism, checkpoints as described.  ￼
+	•	Verifier and Repair loops cover budget/feasibility/weather/prefs with at least four checks.  ￼
+	•	Eval suite (YAML + CLI) exists and matches “11) Test & Scenario Suite”.  ￼
+	•	Submission polish
+	•	Add a docs/demo_script.md that maps exactly to:
+	•	parallel airport comparison → violation → repair → final itinerary → what-if adjustment.  ￼
+	•	Optional but nice: include notes for a 2–3 minute screen capture as requested.
+
+“good” means:
+	•	Running with MCP enabled:
+	•	At least one scenario in the eval suite calls the MCP tool (you can assert on this in the YAML).
+	•	Running with MCP disabled:
+	•	Same scenario passes with the local adapter, with slightly different provenance (source shows local_adapter instead of mcp_server), but no crashes.
+	•	docs/checklist.md has no “not implemented” entries for the Candidate Checklist bullets.
+
+merge gates:
+	•	Unit/integration tests:
+	•	Simulated MCP outage leads to a clean fallback, not a 500.
+	•	At least one eval scenario asserts must_call_tools including the MCP tool name.
+	•	CI:
+	•	New tests green.
+	•	No increase in TTFE / E2E latencies beyond SLOs defined in SPEC (perf gates from PR9 still enforced).
 _
 _
 _
@@ -191,11 +299,3 @@ ci perf gates missing (from pr9 onward)? fix.
 week-level outcome (what this roadmap
 guarantees if followed)
 ●
-day 1–2: contracts stable, eval/ci in place, vertical sse path visible.
-●
-day 3–4: real tools + feature-based selector + verifiers passing core negatives.
-●
-day 5: bounded repair + trusted synthesis + perf/citation gates + auth/ops basics + eval
-≥90% + chaos degradation demos.
-if you want, next step i’ll turn pr1 into a crisp issue with acceptance checklist and a short context
-brief for claude—but per your instruction, no prompts yet.
