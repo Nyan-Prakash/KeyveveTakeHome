@@ -11,6 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.app.db.base import Base
 
 if TYPE_CHECKING:
+    from .agent_run_event import AgentRunEvent
     from .itinerary import Itinerary
     from .org import Org
     from .user import User
@@ -52,6 +53,9 @@ class AgentRun(Base):
     user: Mapped["User"] = relationship("User", back_populates="agent_runs")
     itineraries: Mapped[list["Itinerary"]] = relationship(
         "Itinerary", back_populates="agent_run"
+    )
+    events: Mapped[list["AgentRunEvent"]] = relationship(
+        "AgentRunEvent", back_populates="agent_run", cascade="all, delete-orphan"
     )
 
     # Constraints

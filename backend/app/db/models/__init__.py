@@ -1,6 +1,7 @@
 """ORM models for database tables."""
 
 from .agent_run import AgentRun
+from .agent_run_event import AgentRunEvent
 from .destination import Destination
 from .embedding import Embedding
 from .idempotency import IdempotencyEntry
@@ -18,6 +19,7 @@ __all__ = [
     "KnowledgeItem",
     "Embedding",
     "AgentRun",
+    "AgentRunEvent",
     "Itinerary",
     "IdempotencyEntry",
 ]

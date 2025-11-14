@@ -89,3 +89,11 @@ class TransitLeg(BaseModel):
         default=None, description="Last departure for public transit"
     )
     provenance: Provenance = Field(description="Data source information")
+
+
+class FxRate(BaseModel):
+    """Foreign exchange rate."""
+
+    rate: float = Field(description="Exchange rate value")
+    as_of: date = Field(description="Date the rate is valid for")
+    provenance: Provenance = Field(description="Data source information")

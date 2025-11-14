@@ -26,7 +26,9 @@ class Destination(Base):
     )
     city: Mapped[str] = mapped_column(Text, nullable=False)
     country: Mapped[str] = mapped_column(Text, nullable=False)
-    geo: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)  # {lat: float, lon: float}
+    geo: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False
+    )  # {lat: float, lon: float}
     fixture_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

@@ -31,7 +31,9 @@ class Itinerary(Base):
     user_id: Mapped[UUID] = mapped_column(
         ForeignKey("user.user_id", ondelete="CASCADE"), nullable=False
     )
-    data: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)  # ItineraryV1 JSON
+    data: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False
+    )  # ItineraryV1 JSON
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

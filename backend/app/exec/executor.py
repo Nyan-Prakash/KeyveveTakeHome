@@ -371,7 +371,9 @@ class ToolExecutor:
             # Call tool and await if it's a coroutine
             result_or_awaitable = tool(args)
             if inspect.iscoroutine(result_or_awaitable):
-                result = await asyncio.wait_for(result_or_awaitable, timeout=soft_timeout)
+                result = await asyncio.wait_for(
+                    result_or_awaitable, timeout=soft_timeout
+                )
             else:
                 result = result_or_awaitable
             # Handle case where async function returns dict directly
