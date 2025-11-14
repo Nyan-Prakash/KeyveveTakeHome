@@ -2,7 +2,7 @@
 
 from datetime import UTC, date, datetime
 
-from backend.app.models.common import Provenance
+from backend.app.models.common import Provenance, compute_response_digest
 from backend.app.models.tool_results import FxRate
 
 
@@ -27,22 +27,27 @@ def get_fx_rate(
         as_of = date.today()
 
     # Get fixture rate
-    rate = _get_fixture_fx_rate(from_currency, to_currency)
+    rate_value = _get_fixture_fx_rate(from_currency, to_currency)
 
-    # Create provenance
-    provenance = Provenance(
-        source="tool",
-        ref_id=f"fixture:fx:{from_currency}-{to_currency}:{as_of.isoformat()}",
-        source_url="fixture://fx",
-        fetched_at=datetime.now(UTC),
-        cache_hit=False,
-    )
-
-    return FxRate(
-        rate=rate,
+    # Create FX rate object
+    fx_rate = FxRate(
+        rate=rate_value,
         as_of=as_of,
-        provenance=provenance,
+        provenance=Provenance(
+            source="fixture",
+            ref_id=f"fixture:fx:{from_currency}-{to_currency}:{as_of.isoformat()}",
+            source_url="fixture://fx",
+            fetched_at=datetime.now(UTC),
+            cache_hit=False,
+            response_digest=None,  # Computed below
+        ),
     )
+
+    # Compute and set response digest
+    fx_data = fx_rate.model_dump(mode="json")
+    fx_rate.provenance.response_digest = compute_response_digest(fx_data)
+
+    return fx_rate
 
 
 def _get_fixture_fx_rate(from_currency: str, to_currency: str) -> float:

@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/models/tool_results.py
+# hypothesis_version: 6.147.0
+
+['Arrival time in UTC', 'Attraction name', 'Check-in time window', 'Exchange rate value', 'Forecast date', 'Lodging name', 'Origin IATA code', 'Origin coordinates', 'Price in USD cents', 'Service tier', 'Transportation mode', 'Whether kid-friendly', 'Wind speed in km/h']

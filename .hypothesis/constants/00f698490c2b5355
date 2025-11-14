@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/adapters/__init__.py
+# hypothesis_version: 6.147.0
+
+['get_attractions', 'get_flights', 'get_fx_rate', 'get_lodging', 'get_transit_leg', 'get_weather_forecast']

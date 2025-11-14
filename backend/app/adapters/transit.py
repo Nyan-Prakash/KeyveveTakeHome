@@ -3,7 +3,12 @@
 import math
 from datetime import UTC, datetime, time
 
-from backend.app.models.common import Geo, Provenance, TransitMode
+from backend.app.models.common import (
+    Geo,
+    Provenance,
+    TransitMode,
+    compute_response_digest,
+)
 from backend.app.models.tool_results import TransitLeg
 
 
@@ -49,27 +54,32 @@ def get_transit_leg(
     if mode in (TransitMode.metro, TransitMode.bus):
         last_departure = time(23, 30)
 
-    # Create provenance
+    # Create transit leg
     # Round coords for stable ref_id
     from_key = f"{from_geo.lat:.2f},{from_geo.lon:.2f}"
     to_key = f"{to_geo.lat:.2f},{to_geo.lon:.2f}"
 
-    provenance = Provenance(
-        source="tool",
-        ref_id=f"fixture:transit:{from_key}-{to_key}-{mode.value}",
-        source_url="fixture://transit",
-        fetched_at=datetime.now(UTC),
-        cache_hit=False,
-    )
-
-    return TransitLeg(
+    leg = TransitLeg(
         mode=mode,
         from_geo=from_geo,
         to_geo=to_geo,
         duration_seconds=duration_seconds,
         last_departure=last_departure,
-        provenance=provenance,
+        provenance=Provenance(
+            source="fixture",
+            ref_id=f"fixture:transit:{from_key}-{to_key}-{mode.value}",
+            source_url="fixture://transit",
+            fetched_at=datetime.now(UTC),
+            cache_hit=False,
+            response_digest=None,  # Computed below
+        ),
     )
+
+    # Compute and set response digest
+    leg_data = leg.model_dump(mode="json")
+    leg.provenance.response_digest = compute_response_digest(leg_data)
+
+    return leg
 
 
 def _haversine_distance(geo1: Geo, geo2: Geo) -> float:
@@ -96,7 +106,10 @@ def _haversine_distance(geo1: Geo, geo2: Geo) -> float:
     dlat = lat2 - lat1
     dlon = lon2 - lon1
 
-    a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    a = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    )
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
     distance = R * c

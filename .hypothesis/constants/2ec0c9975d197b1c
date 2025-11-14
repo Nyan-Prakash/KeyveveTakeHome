@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/adapters/transit.py
+# hypothesis_version: 6.147.0
+
+[6371.0, 3600, 'fixture', 'fixture://transit', 'json']

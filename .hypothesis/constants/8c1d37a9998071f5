@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/models/common.py
+# hypothesis_version: 6.147.0
+
+['Amount in cents', 'Currency code', 'USD', 'attraction', 'budget', 'budget_exceeded', 'bus', 'flight', 'lodging', 'luxury', 'meal', 'metro', 'mid', 'pref_violated', 'taxi', 'timing_infeasible', 'transit', 'venue_closed', 'walk', 'weather_unsuitable']

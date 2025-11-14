@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/adapters/flights.py
+# hypothesis_version: 6.147.0
+
+[1.5, 2.5, 3600, 50000, 'budget', 'fixture', 'fixture://flights', 'json', 'mid', 'premium']

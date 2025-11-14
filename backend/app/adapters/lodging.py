@@ -2,7 +2,13 @@
 
 from datetime import UTC, date, datetime, time
 
-from backend.app.models.common import Geo, Provenance, Tier, TimeWindow
+from backend.app.models.common import (
+    Geo,
+    Provenance,
+    Tier,
+    TimeWindow,
+    compute_response_digest,
+)
 from backend.app.models.tool_results import Lodging
 
 
@@ -31,7 +37,7 @@ def get_lodging(
     all_lodging = _generate_fixture_lodging(city)
 
     # Filter by tier preferences
-    filtered = [l for l in all_lodging if l.tier in tier_prefs]
+    filtered = [option for option in all_lodging if option.tier in tier_prefs]
 
     # Return up to 4 options
     return filtered[:4]
@@ -65,14 +71,6 @@ def _generate_fixture_lodging(city: str) -> list[Lodging]:
         # Slight geo variation
         geo = Geo(lat=base_geo.lat + (idx * 0.01), lon=base_geo.lon + (idx * 0.01))
 
-        provenance = Provenance(
-            source="tool",
-            ref_id=f"fixture:lodge:{city}-{idx}",
-            source_url="fixture://lodging",
-            fetched_at=datetime.now(UTC),
-            cache_hit=False,
-        )
-
         lodging = Lodging(
             lodging_id=f"LODGE{city.replace(' ', '')}{idx}",
             name=name,
@@ -82,8 +80,19 @@ def _generate_fixture_lodging(city: str) -> list[Lodging]:
             price_per_night_usd_cents=price,
             tier=tier,
             kid_friendly=kid_friendly,
-            provenance=provenance,
+            provenance=Provenance(
+                source="fixture",
+                ref_id=f"fixture:lodge:{city}-{idx}",
+                source_url="fixture://lodging",
+                fetched_at=datetime.now(UTC),
+                cache_hit=False,
+                response_digest=None,  # Computed below
+            ),
         )
+
+        # Compute and set response digest
+        lodging_data = lodging.model_dump(mode="json")
+        lodging.provenance.response_digest = compute_response_digest(lodging_data)
 
         lodging_options.append(lodging)
 

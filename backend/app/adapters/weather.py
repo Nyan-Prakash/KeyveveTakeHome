@@ -60,11 +60,8 @@ def get_weather_forecast(
             target_date = args["date"]
 
             # Construct API request
-            # Using historical or forecast API depending on date
-            today = date.today()
-            is_future = target_date > today
-
             # For demo purposes, we'll use a simplified approach
+            # In production, would use different endpoints for historical vs forecast
             # In production, you'd use different endpoints for historical vs forecast
             url = "https://api.openweathermap.org/data/2.5/weather"
 
@@ -87,11 +84,12 @@ def get_weather_forecast(
                 # For production, you'd use One Call API 3.0
                 return {
                     "precip_prob": 0.0,  # Not available in free tier
-                    "wind_kmh": data.get("wind", {}).get("speed", 0) * 3.6,  # m/s to km/h
+                    "wind_kmh": data.get("wind", {}).get("speed", 0)
+                    * 3.6,  # m/s to km/h
                     "temp_c_high": data.get("main", {}).get("temp_max", 20),
                     "temp_c_low": data.get("main", {}).get("temp_min", 15),
                 }
-            except Exception as e:
+            except Exception:
                 # Fall back to fixture data on error
                 return _get_fixture_weather(target_date)
 
