@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/adapters/events.py
+# hypothesis_version: 6.147.0
+
+[-74.006, -0.1278, 0.0, 0.005, 2.3522, 35.6762, 40.7128, 48.8566, 51.5074, 139.6503, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 5000, 6000, 'America/New_York', 'Aquarium', 'Art Museum', 'Asia/Tokyo', 'Beach', 'Botanical Garden', 'Cathedral', 'City Park', 'Concert Hall', 'Europe/London', 'Europe/Paris', 'Fine Dining District', 'Food Market', 'Historic District', 'Historical Temple', 'London', 'Modern Art Center', 'National Gallery', 'New York', 'Observation Deck', 'Opera House', 'Paris', 'Public Garden', 'Science Museum', 'Shopping Mall', 'Theater District', 'Tokyo', 'UTC', 'Zoo', 'art', 'culture', 'education', 'fixture', 'food', 'geo', 'history', 'json', 'kid', 'museum', 'music', 'other', 'outdoor', 'park', 'shopping', 'sightseeing', 'temple', 'tz']

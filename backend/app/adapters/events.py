@@ -1,9 +1,9 @@
 """Events/Attractions adapter using fixture data."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
-from backend.app.models.common import Geo, Provenance
+from backend.app.models.common import Geo, Provenance, compute_response_digest
 from backend.app.models.tool_results import Attraction, Window
 
 
@@ -152,14 +152,6 @@ def _generate_fixture_attractions(city: str) -> list[Attraction]:
 
             opening_hours[str(day)] = windows
 
-        provenance = Provenance(
-            source="tool",
-            ref_id=f"fixture:attraction:{city}-{idx}",
-            source_url="fixture://attractions",
-            fetched_at=datetime.now(UTC),
-            cache_hit=False,
-        )
-
         attraction = Attraction(
             id=f"ATTR{city.replace(' ', '')}{idx:03d}",
             name=name,
@@ -169,8 +161,19 @@ def _generate_fixture_attractions(city: str) -> list[Attraction]:
             opening_hours=opening_hours,
             location=geo,
             est_price_usd_cents=price if price > 0 else None,
-            provenance=provenance,
+            provenance=Provenance(
+                source="fixture",
+                ref_id=f"fixture:attraction:{city}-{idx}",
+                source_url="fixture://attractions",
+                fetched_at=datetime.now(UTC),
+                cache_hit=False,
+                response_digest=None,  # Computed below
+            ),
         )
+
+        # Compute and set response digest
+        attraction_data = attraction.model_dump(mode="json")
+        attraction.provenance.response_digest = compute_response_digest(attraction_data)
 
         attractions.append(attraction)
 

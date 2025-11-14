@@ -2,7 +2,10 @@
 
 from datetime import UTC, date, datetime, timedelta
 
-from backend.app.models.common import Provenance
+from backend.app.models.common import (
+    Provenance,
+    compute_response_digest,
+)
 from backend.app.models.tool_results import FlightOption
 
 
@@ -95,17 +98,11 @@ def _generate_fixture_flights(
         else:  # premium
             price = int(base_price * 2.5)
 
-        # Create provenance
-        provenance = Provenance(
-            source="tool",
-            ref_id=f"fixture:flight:{origin}-{dest}-{flight_date.isoformat()}-{idx}",
-            source_url="fixture://flights",
-            fetched_at=datetime.now(UTC),
-            cache_hit=False,
-        )
+        # Create flight object
+        flight_id = f"FL{origin}{dest}{flight_date.strftime('%Y%m%d')}{idx}"
 
         flight = FlightOption(
-            flight_id=f"FL{origin}{dest}{flight_date.strftime('%Y%m%d')}{idx}",
+            flight_id=flight_id,
             origin=origin,
             dest=dest,
             departure=departure_time,
@@ -113,8 +110,19 @@ def _generate_fixture_flights(
             duration_seconds=duration_hours * 3600,
             price_usd_cents=price,
             overnight=overnight,
-            provenance=provenance,
+            provenance=Provenance(
+                source="fixture",  # Changed from "tool" to "fixture" for clarity
+                ref_id=f"fixture:flight:{origin}-{dest}-{flight_date.isoformat()}-{idx}",
+                source_url="fixture://flights",
+                fetched_at=datetime.now(UTC),
+                cache_hit=False,  # Will be overridden if called through executor cache
+                response_digest=None,  # Computed below
+            ),
         )
+
+        # Compute and set response digest for deduplication
+        flight_data = flight.model_dump(mode="json")
+        flight.provenance.response_digest = compute_response_digest(flight_data)
 
         flights.append(flight)
 

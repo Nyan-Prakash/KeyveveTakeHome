@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime, time
+import hashlib
+import json
+from datetime import UTC, datetime, time
 from enum import Enum
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -80,4 +83,61 @@ class Provenance(BaseModel):
     )
     response_digest: str | None = Field(
         default=None, description="Hash of the response for deduplication"
+    )
+
+
+# Provenance helper functions
+
+
+def compute_response_digest(data: Any) -> str:
+    """
+    Compute SHA256 digest of response data for deduplication.
+
+    Args:
+        data: Any JSON-serializable data
+
+    Returns:
+        Hex string digest of the data
+    """
+    # Convert to stable JSON representation
+    json_str = json.dumps(data, sort_keys=True, default=str)
+    return hashlib.sha256(json_str.encode()).hexdigest()
+
+
+def create_provenance(
+    source: str,
+    ref_id: str | None = None,
+    source_url: str | None = None,
+    fetched_at: datetime | None = None,
+    cache_hit: bool | None = None,
+    response_data: Any = None,
+) -> Provenance:
+    """
+    Create a Provenance object with automatic timestamp and digest computation.
+
+    Args:
+        source: Data source type (tool, rag, user, fixture)
+        ref_id: Optional reference ID for the data source
+        source_url: Optional URL of the data source
+        fetched_at: When data was fetched (defaults to now)
+        cache_hit: Whether data came from cache
+        response_data: Optional response data to compute digest from
+
+    Returns:
+        Provenance object with all fields populated
+    """
+    if fetched_at is None:
+        fetched_at = datetime.now(UTC)
+
+    response_digest = None
+    if response_data is not None:
+        response_digest = compute_response_digest(response_data)
+
+    return Provenance(
+        source=source,
+        ref_id=ref_id,
+        source_url=source_url,
+        fetched_at=fetched_at,
+        cache_hit=cache_hit,
+        response_digest=response_digest,
     )
