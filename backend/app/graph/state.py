@@ -62,3 +62,21 @@ class OrchestratorState(BaseModel):
         default_factory=dict,
         description="Flight options keyed by option_ref",
     )
+
+    # Repair tracking (PR8)
+    plan_before_repair: PlanV1 | None = Field(
+        default=None,
+        description="Plan snapshot before repair attempts",
+    )
+    repair_cycles_run: int = Field(
+        default=0,
+        description="Number of repair cycles executed",
+    )
+    repair_moves_applied: int = Field(
+        default=0,
+        description="Total number of repair moves applied",
+    )
+    repair_reuse_ratio: float = Field(
+        default=1.0,
+        description="Fraction of plan unchanged by repair (0-1)",
+    )

@@ -314,18 +314,76 @@ def verifier_node(state: OrchestratorState) -> OrchestratorState:
 
 
 def repair_node(state: OrchestratorState) -> OrchestratorState:
-    """Repair plan violations.
+    """Repair plan violations using PR8 repair engine.
 
-    In PR4, this is a no-op pass-through.
-    Real repair logic will be added in later PRs.
+    Applies bounded repair moves to fix violations:
+    - ≤2 moves per cycle
+    - ≤3 cycles total
+    - Partial recompute with reuse tracking
+    - Streams repair decisions as events
     """
+    from backend.app.metrics import MetricsClient
+    from backend.app.repair import repair_plan
+
     state.messages.append("Checking for repairs...")
     state.last_event_ts = datetime.now(UTC)
 
-    if state.violations:
-        state.messages.append(f"Would repair {len(state.violations)} violations")
+    # Check if we have blocking violations to repair
+    blocking_violations = [v for v in state.violations if v.blocking]
+
+    if not blocking_violations:
+        state.messages.append("No blocking violations - no repairs needed")
+        state.last_event_ts = datetime.now(UTC)
+        return state
+
+    if not state.plan:
+        state.messages.append("No plan to repair")
+        state.last_event_ts = datetime.now(UTC)
+        return state
+
+    # Initialize metrics client
+    metrics = MetricsClient()
+
+    # Store plan before repair
+    state.plan_before_repair = state.plan
+
+    # Log repair attempt
+    state.messages.append(
+        f"Attempting to repair {len(blocking_violations)} blocking violations"
+    )
+    metrics.inc_repair_attempt()
+
+    # Run repair engine
+    result = repair_plan(
+        plan=state.plan,
+        violations=state.violations,
+        metrics=metrics,
+    )
+
+    # Update state with repair results
+    state.plan = result.plan_after
+    state.violations = result.remaining_violations
+    state.repair_cycles_run = result.cycles_run
+    state.repair_moves_applied = result.moves_applied
+    state.repair_reuse_ratio = result.reuse_ratio
+
+    # Stream repair decision events
+    for diff in result.diffs:
+        state.messages.append(
+            f"Repair move: {diff.move_type.value} on day {diff.day_index} - {diff.reason}"
+        )
+
+    # Log final results
+    if result.success:
+        state.messages.append(
+            f"Repair successful: {result.moves_applied} moves in {result.cycles_run} cycles, "
+            f"{result.reuse_ratio:.0%} reuse"
+        )
     else:
-        state.messages.append("No repairs needed")
+        state.messages.append(
+            f"Repair incomplete: {len(result.remaining_violations)} violations remain after "
+            f"{result.cycles_run} cycles"
+        )
 
     state.last_event_ts = datetime.now(UTC)
     return state
