@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/db/models/knowledge_item.py
+# hypothesis_version: 6.147.0
+
+['CASCADE', 'Destination', 'Destination | None', 'Embedding', 'Org', 'SET NULL', 'all, delete-orphan', 'dest_id', 'destination.dest_id', 'knowledge_item', 'knowledge_items', 'org.org_id', 'org_id']
