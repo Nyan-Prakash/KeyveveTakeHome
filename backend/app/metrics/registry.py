@@ -50,6 +50,20 @@ class MetricsClient:
         # Preference violations: preference -> count
         self.pref_violations: dict[str, int] = defaultdict(int)
 
+        # Repair metrics (PR8)
+        # Repair attempts and successes
+        self.repair_attempts: int = 0
+        self.repair_successes: int = 0
+
+        # Repair cycles per run: list of cycle counts
+        self.repair_cycles: list[int] = []
+
+        # Repair moves per run: list of move counts
+        self.repair_moves: list[int] = []
+
+        # Reuse ratios: list of reuse ratios (0-1)
+        self.repair_reuse_ratios: list[float] = []
+
     def observe_tool_latency(self, tool: str, status: str, latency_ms: int) -> None:
         """Record a tool latency observation."""
         self.tool_latencies[tool].append((status, latency_ms))
@@ -122,6 +136,26 @@ class MetricsClient:
         """Increment preference violation counter."""
         self.pref_violations[preference] += 1
 
+    def inc_repair_attempt(self) -> None:
+        """Increment repair attempt counter."""
+        self.repair_attempts += 1
+
+    def inc_repair_success(self) -> None:
+        """Increment repair success counter."""
+        self.repair_successes += 1
+
+    def observe_repair_cycles(self, cycles: int) -> None:
+        """Record number of repair cycles for a run."""
+        self.repair_cycles.append(cycles)
+
+    def observe_repair_moves(self, moves: int) -> None:
+        """Record number of repair moves for a run."""
+        self.repair_moves.append(moves)
+
+    def observe_repair_reuse_ratio(self, ratio: float) -> None:
+        """Record reuse ratio for a repair run."""
+        self.repair_reuse_ratios.append(ratio)
+
     def get_budget_delta_stats(self) -> dict[str, float]:
         """Get budget delta statistics."""
         if not self.budget_deltas:
@@ -133,6 +167,35 @@ class MetricsClient:
             "min": min(deltas),
             "max": max(deltas),
             "avg": sum(deltas) / len(deltas),
+        }
+
+    def get_repair_stats(self) -> dict[str, float]:
+        """Get repair statistics."""
+        if not self.repair_cycles:
+            return {
+                "attempts": self.repair_attempts,
+                "successes": self.repair_successes,
+                "success_rate": 0.0,
+                "avg_cycles": 0.0,
+                "avg_moves": 0.0,
+                "avg_reuse": 0.0,
+            }
+
+        success_rate = (
+            self.repair_successes / self.repair_attempts
+            if self.repair_attempts > 0
+            else 0.0
+        )
+
+        return {
+            "attempts": self.repair_attempts,
+            "successes": self.repair_successes,
+            "success_rate": success_rate,
+            "avg_cycles": sum(self.repair_cycles) / len(self.repair_cycles),
+            "avg_moves": sum(self.repair_moves) / len(self.repair_moves),
+            "avg_reuse": (
+                sum(self.repair_reuse_ratios) / len(self.repair_reuse_ratios)
+            ),
         }
 
     def reset(self) -> None:
@@ -150,3 +213,9 @@ class MetricsClient:
         self.weather_blocking_total = 0
         self.weather_advisory_total = 0
         self.pref_violations.clear()
+        # PR8 metrics
+        self.repair_attempts = 0
+        self.repair_successes = 0
+        self.repair_cycles.clear()
+        self.repair_moves.clear()
+        self.repair_reuse_ratios.clear()
