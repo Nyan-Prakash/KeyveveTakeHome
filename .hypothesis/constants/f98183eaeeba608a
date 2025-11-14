@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/adapters/flights.py
+# hypothesis_version: 6.147.0
+
+[10.5, 11.5, 12.5, 3600, 59000, 61000, 65000, 68000, 72000, 75000, '%Y-%m-%d', 'AF8350', 'AF8351', 'CDG', 'KL644', 'KL645', 'LH490', 'LH491', 'ORY', 'SEA', 'date', 'dest', 'duration_hours', 'fixture', 'fixture://flights', 'flight_id', 'flights', 'origin', 'overnight', 'price_usd_cents', 'success']

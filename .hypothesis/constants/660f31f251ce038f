@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/adapters/weather.py
+# hypothesis_version: 6.147.0
+
+[0.0, 3.6, 3600, 'appid', 'cnt', 'days', 'dt', 'lat', 'list', 'lon', 'main', 'metric', 'pop', 'speed', 'success', 'temp_max', 'temp_min', 'units', 'weather', 'weather_api', 'wind']

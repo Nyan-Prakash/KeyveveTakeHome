@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/features/feature_mapper.py
+# hypothesis_version: 6.147.0
+
+[10000, 'architecture', 'art', 'bus', 'church', 'culture', 'currency', 'exercise', 'flight', 'fx', 'guided', 'history', 'indoor', 'kid_friendly', 'local', 'lodging', 'metro', 'monument', 'museum', 'neighborhood', 'palace', 'private_transport', 'public_transport', 'religion', 'royal', 'scenic', 'taxi', 'tour', 'transit', 'travel', 'walk', 'walking']

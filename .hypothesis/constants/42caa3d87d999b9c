@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/adapters/transit.py
+# hypothesis_version: 6.147.0
+
+[0.5, 3600, '00:30', '23:30', 'bus', 'duration_factor', 'duration_seconds', 'fixture', 'fixture://transit', 'from_lat', 'from_lon', 'last_departure', 'metro', 'mode', 'success', 'taxi', 'to_lat', 'to_lon', 'transit', 'walk']

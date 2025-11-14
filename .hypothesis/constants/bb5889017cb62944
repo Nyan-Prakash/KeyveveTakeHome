@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/adapters/lodging.py
+# hypothesis_version: 6.147.0
+
+[2.3212, 2.3371, 2.3392, 2.3439, 2.3656, 48.8551, 48.8648, 48.8656, 48.8717, 48.8718, 3600, 9500, 18000, 22000, 45000, 52000, '%Y-%m-%d', '06:00', '07:00', '08:00', '10:00', '11:00', '12:00', '14:00', '15:00', '21:00', '22:00', '23:00', '23:59', "Hotel Jeanne d'Arc", 'Hotel Malte Opera', 'Hotel de Crillon', 'budget', 'checkin_date', 'checkin_end', 'checkin_start', 'checkout_date', 'checkout_end', 'checkout_start', 'city', 'fixture', 'fixture://lodging', 'kid_friendly', 'lat', 'lodging', 'lodging_id', 'lon', 'luxury', 'mid', 'name', 'paris_hotel_1', 'paris_hotel_2', 'paris_hotel_3', 'paris_hotel_4', 'paris_hotel_5', 'success', 'tier']
