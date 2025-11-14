@@ -1,6 +1,6 @@
 """LangGraph state definition for orchestrator."""
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from backend.app.models.intent import IntentV1
 from backend.app.models.itinerary import ItineraryV1
 from backend.app.models.plan import PlanV1
+from backend.app.models.tool_results import Attraction, FlightOption, WeatherDay
 from backend.app.models.violations import Violation
 
 
@@ -46,4 +47,18 @@ class OrchestratorState(BaseModel):
     last_event_ts: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
         description="Timestamp of last event",
+    )
+
+    # Tool results for verification (PR7)
+    weather_by_date: dict[date, WeatherDay] = Field(
+        default_factory=dict,
+        description="Weather forecasts keyed by date",
+    )
+    attractions: dict[str, Attraction] = Field(
+        default_factory=dict,
+        description="Attractions keyed by option_ref",
+    )
+    flights: dict[str, FlightOption] = Field(
+        default_factory=dict,
+        description="Flight options keyed by option_ref",
     )
