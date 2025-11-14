@@ -204,25 +204,107 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
 
 
 def verifier_node(state: OrchestratorState) -> OrchestratorState:
-    """Verify plan constraints.
+    """Verify plan constraints using PR7 verifiers.
 
-    In PR4, this always returns no violations.
-    Real verification logic will be added in later PRs.
+    Runs all four verifiers:
+    - Budget (with 10% slippage)
+    - Feasibility (timing + venue hours + DST + last train)
+    - Weather (tri-state logic)
+    - Preferences (must-have vs nice-to-have)
+
+    Emits metrics and updates state.violations.
     """
+    from backend.app.metrics import MetricsClient
+    from backend.app.verify import (
+        verify_budget,
+        verify_feasibility,
+        verify_preferences,
+        verify_weather,
+    )
+
     state.messages.append("Verifying plan constraints...")
     state.last_event_ts = datetime.now(UTC)
 
-    # In PR4, trivial check: budget must be less than 1 billion cents
-    if state.intent.budget_usd_cents > 100_000_000_00:
-        from backend.app.models.common import ViolationKind
+    if not state.plan:
+        state.messages.append("No plan to verify")
+        return state
 
-        state.violations.append(
-            {
-                "kind": ViolationKind.budget_exceeded,
-                "node_ref": "verifier",
-                "details": {"reason": "Budget exceeds $1 billion"},
-                "blocking": True,
-            }  # type: ignore[arg-type]
+    # Initialize metrics client
+    metrics = MetricsClient()
+
+    # Clear previous violations
+    state.violations = []
+
+    # Run budget verifier
+    budget_violations = verify_budget(state.intent, state.plan)
+    state.violations.extend(budget_violations)
+
+    # Emit budget metrics
+    total_cost = 0
+    for day_plan in state.plan.days:
+        for slot in day_plan.slots:
+            if slot.choices:
+                total_cost += slot.choices[0].features.cost_usd_cents
+    total_cost += state.plan.assumptions.daily_spend_est_cents * len(state.plan.days)
+
+    metrics.observe_budget_delta(state.intent.budget_usd_cents, total_cost)
+
+    if budget_violations:
+        for violation in budget_violations:
+            metrics.inc_violation(violation.kind.value)
+
+    # Run feasibility verifier
+    feasibility_violations = verify_feasibility(
+        state.intent,
+        state.plan,
+        state.attractions,
+    )
+    state.violations.extend(feasibility_violations)
+
+    if feasibility_violations:
+        for violation in feasibility_violations:
+            metrics.inc_violation(violation.kind.value)
+            if violation.kind.value == "timing_infeasible":
+                reason = violation.details.get("reason", "timing")
+                metrics.inc_feasibility_violation(reason)
+            elif violation.kind.value == "venue_closed":
+                metrics.inc_feasibility_violation("venue_closed")
+
+    # Run weather verifier
+    weather_violations = verify_weather(state.plan, state.weather_by_date)
+    state.violations.extend(weather_violations)
+
+    if weather_violations:
+        for violation in weather_violations:
+            metrics.inc_violation(violation.kind.value)
+            if violation.blocking:
+                metrics.inc_weather_blocking()
+            else:
+                metrics.inc_weather_advisory()
+
+    # Run preferences verifier
+    pref_violations = verify_preferences(
+        state.intent,
+        state.plan,
+        state.flights,
+        state.attractions,
+    )
+    state.violations.extend(pref_violations)
+
+    if pref_violations:
+        for violation in pref_violations:
+            metrics.inc_violation(violation.kind.value)
+            pref = violation.details.get("preference", "unknown")
+            metrics.inc_pref_violation(pref)
+
+    # Log results
+    blocking_count = sum(1 for v in state.violations if v.blocking)
+    advisory_count = len(state.violations) - blocking_count
+
+    if state.violations:
+        state.messages.append(
+            f"Found {len(state.violations)} violations "
+            f"({blocking_count} blocking, {advisory_count} advisory)"
         )
     else:
         state.messages.append("No violations detected")

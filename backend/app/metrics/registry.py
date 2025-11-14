@@ -33,6 +33,23 @@ class MetricsClient:
         # Breaker states: tool -> current state
         self.breaker_states: dict[str, Literal["open", "closed", "half_open"]] = {}
 
+        # Verifier metrics (PR7)
+        # Violation counts: kind -> count
+        self.violation_counts: dict[str, int] = defaultdict(int)
+
+        # Budget deltas: list of (budget_usd_cents, total_cost_usd_cents, delta)
+        self.budget_deltas: list[tuple[int, int, int]] = []
+
+        # Feasibility violation details: type -> count
+        self.feasibility_violations: dict[str, int] = defaultdict(int)
+
+        # Weather violation details: blocking vs advisory
+        self.weather_blocking_total: int = 0
+        self.weather_advisory_total: int = 0
+
+        # Preference violations: preference -> count
+        self.pref_violations: dict[str, int] = defaultdict(int)
+
     def observe_tool_latency(self, tool: str, status: str, latency_ms: int) -> None:
         """Record a tool latency observation."""
         self.tool_latencies[tool].append((status, latency_ms))
@@ -78,6 +95,46 @@ class MetricsClient:
             return self.tool_errors.get(tool, {}).get(reason, 0)
         return sum(self.tool_errors.get(tool, {}).values())
 
+    def observe_budget_delta(
+        self, budget_usd_cents: int, total_cost_usd_cents: int
+    ) -> None:
+        """Record budget delta for metrics."""
+        delta = total_cost_usd_cents - budget_usd_cents
+        self.budget_deltas.append((budget_usd_cents, total_cost_usd_cents, delta))
+
+    def inc_violation(self, kind: str) -> None:
+        """Increment violation counter for a kind."""
+        self.violation_counts[kind] += 1
+
+    def inc_feasibility_violation(self, violation_type: str) -> None:
+        """Increment feasibility violation counter by type."""
+        self.feasibility_violations[violation_type] += 1
+
+    def inc_weather_blocking(self) -> None:
+        """Increment weather blocking violation counter."""
+        self.weather_blocking_total += 1
+
+    def inc_weather_advisory(self) -> None:
+        """Increment weather advisory violation counter."""
+        self.weather_advisory_total += 1
+
+    def inc_pref_violation(self, preference: str) -> None:
+        """Increment preference violation counter."""
+        self.pref_violations[preference] += 1
+
+    def get_budget_delta_stats(self) -> dict[str, float]:
+        """Get budget delta statistics."""
+        if not self.budget_deltas:
+            return {"count": 0, "min": 0, "max": 0, "avg": 0}
+
+        deltas = [delta for _, _, delta in self.budget_deltas]
+        return {
+            "count": len(deltas),
+            "min": min(deltas),
+            "max": max(deltas),
+            "avg": sum(deltas) / len(deltas),
+        }
+
     def reset(self) -> None:
         """Reset all metrics (useful for testing)."""
         self.tool_latencies.clear()
@@ -86,3 +143,10 @@ class MetricsClient:
         self.tool_cache_hits.clear()
         self.breaker_opens.clear()
         self.breaker_states.clear()
+        # PR7 metrics
+        self.violation_counts.clear()
+        self.budget_deltas.clear()
+        self.feasibility_violations.clear()
+        self.weather_blocking_total = 0
+        self.weather_advisory_total = 0
+        self.pref_violations.clear()
