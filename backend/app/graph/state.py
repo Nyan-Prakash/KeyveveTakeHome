@@ -8,7 +8,13 @@ from pydantic import BaseModel, ConfigDict, Field
 from backend.app.models.intent import IntentV1
 from backend.app.models.itinerary import ItineraryV1
 from backend.app.models.plan import PlanV1
-from backend.app.models.tool_results import Attraction, FlightOption, WeatherDay
+from backend.app.models.tool_results import (
+    Attraction,
+    FlightOption,
+    Lodging,
+    TransitLeg,
+    WeatherDay,
+)
 from backend.app.models.violations import Violation
 
 
@@ -79,4 +85,24 @@ class OrchestratorState(BaseModel):
     repair_reuse_ratio: float = Field(
         default=1.0,
         description="Fraction of plan unchanged by repair (0-1)",
+    )
+
+    # Additional tool results for synthesis (PR9)
+    lodgings: dict[str, "Lodging"] = Field(
+        default_factory=dict,
+        description="Lodging options keyed by option_ref",
+    )
+    transit_legs: dict[str, "TransitLeg"] = Field(
+        default_factory=dict,
+        description="Transit legs keyed by option_ref",
+    )
+
+    # Node timing for right-rail display (PR9)
+    node_timings: dict[str, int] = Field(
+        default_factory=dict,
+        description="Node execution times in milliseconds",
+    )
+    tool_call_counts: dict[str, int] = Field(
+        default_factory=dict,
+        description="Count of tool calls per tool type",
     )

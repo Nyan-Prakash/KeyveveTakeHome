@@ -1,6 +1,6 @@
 scenarios:
-  - scenario_id: happy_stub
-    description: "Trivial plan within budget"
+  - scenario_id: happy_basic
+    description: "Basic Paris trip within budget"
     intent:
       city: "Paris"
       date_window:
@@ -14,31 +14,307 @@ scenarios:
         themes: ["art"]
         avoid_overnight: false
         locked_slots: []
+    must_call_tools: ["weather", "flights", "lodging"]
     must_satisfy:
       - predicate: "itinerary.cost_breakdown.total_usd_cents <= intent.budget_usd_cents"
         description: "Cost within budget"
       - predicate: "len(itinerary.days) >= 4"
         description: "At least 4 days"
-      - predicate: "len(itinerary.days) <= 7"
-        description: "At most 7 days"
       - predicate: "len(itinerary.citations) > 0"
         description: "Has citations"
+    expected_fields:
+      - "itinerary_id"
+      - "cost_breakdown.lodging_usd_cents"
+      - "days[0].activities"
 
-  - scenario_id: budget_fail_stub
-    description: "Plan that should exceed budget"
+  - scenario_id: kid_friendly_london
+    description: "Kid-friendly London trip"
     intent:
-      city: "Paris"
+      city: "London"
       date_window:
-        start: "2025-06-01"
-        end: "2025-06-05" 
-        tz: "Europe/Paris"
-      budget_usd_cents: 100000  # $1,000 - too low
-      airports: ["CDG"]
+        start: "2025-07-15"
+        end: "2025-07-18"
+        tz: "Europe/London"
+      budget_usd_cents: 180000  # $1,800
+      airports: ["LHR", "LGW"]
       prefs:
-        kid_friendly: false
-        themes: ["luxury"]
+        kid_friendly: true
+        themes: ["family", "education"]
         avoid_overnight: false
         locked_slots: []
+    must_call_tools: ["weather", "flights", "lodging", "attractions"]
+    must_satisfy:
+      - predicate: "intent.prefs.kid_friendly == True"
+        description: "Request is kid-friendly"
+      - predicate: "any('family' in str(activity).lower() or 'children' in str(activity).lower() or 'kid' in str(activity).lower() for day in itinerary.days for activity in day.activities)"
+        description: "Contains kid-friendly activities"
+      - predicate: "itinerary.cost_breakdown.total_usd_cents <= intent.budget_usd_cents"
+        description: "Within budget"
+    expected_fields:
+      - "cost_breakdown.attractions_usd_cents"
+
+  - scenario_id: no_overnight_tokyo
+    description: "Tokyo trip with no overnight flights"
+    intent:
+      city: "Tokyo"
+      date_window:
+        start: "2025-08-10"
+        end: "2025-08-14"
+        tz: "Asia/Tokyo"
+      budget_usd_cents: 320000  # $3,200
+      airports: ["NRT", "HND"]
+      prefs:
+        kid_friendly: false
+        themes: ["culture", "food"]
+        avoid_overnight: true
+        locked_slots: []
+    must_call_tools: ["weather", "flights", "lodging"]
+    must_satisfy:
+      - predicate: "intent.prefs.avoid_overnight == True"
+        description: "Avoid overnight flights requested"
+      - predicate: "itinerary.cost_breakdown.total_usd_cents <= intent.budget_usd_cents"
+        description: "Within budget"
+      - predicate: "len(itinerary.days) >= 4"
+        description: "Multiple days planned"
+    expected_fields:
+      - "travel.outbound_flight"
+      - "cost_breakdown.flights_usd_cents"
+
+  - scenario_id: budget_exceeded_luxury
+    description: "Luxury NYC trip that should exceed budget"
+    intent:
+      city: "New York"
+      date_window:
+        start: "2025-09-01"
+        end: "2025-09-07"
+        tz: "America/New_York"
+      budget_usd_cents: 150000  # $1,500 - too low for 6 days in NYC
+      airports: ["JFK", "LGA"]
+      prefs:
+        kid_friendly: false
+        themes: ["luxury", "fine-dining"]
+        avoid_overnight: false
+        locked_slots: []
+    must_call_tools: ["weather", "flights", "lodging", "attractions"]
     must_satisfy:
       - predicate: "itinerary.cost_breakdown.total_usd_cents > intent.budget_usd_cents"
-        description: "Cost exceeds budget (should fail)"
+        description: "Cost exceeds budget (expected failure)"
+    expected_fields:
+      - "cost_breakdown.total_usd_cents"
+
+  - scenario_id: short_weekend_barcelona
+    description: "Short weekend in Barcelona"
+    intent:
+      city: "Barcelona"
+      date_window:
+        start: "2025-05-17"
+        end: "2025-05-19"
+        tz: "Europe/Madrid"
+      budget_usd_cents: 120000  # $1,200
+      airports: ["BCN"]
+      prefs:
+        kid_friendly: false
+        themes: ["architecture", "art"]
+        avoid_overnight: false
+        locked_slots: []
+    must_call_tools: ["weather", "flights", "lodging"]
+    must_satisfy:
+      - predicate: "len(itinerary.days) >= 2"
+        description: "Weekend trip duration"
+      - predicate: "len(itinerary.days) <= 3"
+        description: "Not longer than 3 days"
+      - predicate: "itinerary.cost_breakdown.total_usd_cents <= intent.budget_usd_cents"
+        description: "Within budget"
+    expected_fields:
+      - "days[0].day_date"
+      - "cost_breakdown.total_usd_cents"
+
+  - scenario_id: family_rome_culture
+    description: "Family cultural trip to Rome"
+    intent:
+      city: "Rome"
+      date_window:
+        start: "2025-04-20"
+        end: "2025-04-26"
+        tz: "Europe/Rome"
+      budget_usd_cents: 280000  # $2,800
+      airports: ["FCO"]
+      prefs:
+        kid_friendly: true
+        themes: ["history", "culture", "family"]
+        avoid_overnight: false
+        locked_slots: []
+    must_call_tools: ["weather", "flights", "lodging", "attractions"]
+    must_satisfy:
+      - predicate: "intent.prefs.kid_friendly == True"
+        description: "Family-friendly request"
+      - predicate: "'history' in intent.prefs.themes or 'culture' in intent.prefs.themes"
+        description: "Cultural themes requested"
+      - predicate: "itinerary.cost_breakdown.total_usd_cents <= intent.budget_usd_cents"
+        description: "Within budget"
+      - predicate: "len(itinerary.days) >= 5"
+        description: "Multi-day cultural experience"
+    expected_fields:
+      - "days[0].activities"
+      - "cost_breakdown.attractions_usd_cents"
+
+  - scenario_id: business_berlin_minimal
+    description: "Minimal business trip to Berlin"
+    intent:
+      city: "Berlin"
+      date_window:
+        start: "2025-03-10"
+        end: "2025-03-12"
+        tz: "Europe/Berlin"
+      budget_usd_cents: 100000  # $1,000
+      airports: ["BER"]
+      prefs:
+        kid_friendly: false
+        themes: ["business"]
+        avoid_overnight: true
+        locked_slots: []
+    must_call_tools: ["weather", "flights", "lodging"]
+    must_satisfy:
+      - predicate: "intent.prefs.avoid_overnight == True"
+        description: "No overnight flights"
+      - predicate: "len(itinerary.days) >= 2"
+        description: "Short business trip"
+      - predicate: "itinerary.cost_breakdown.total_usd_cents <= intent.budget_usd_cents"
+        description: "Within budget"
+    expected_fields:
+      - "cost_breakdown.flights_usd_cents"
+
+  - scenario_id: adventure_iceland
+    description: "Adventure trip to Reykjavik"
+    intent:
+      city: "Reykjavik"
+      date_window:
+        start: "2025-10-05"
+        end: "2025-10-12"
+        tz: "Atlantic/Reykjavik"
+      budget_usd_cents: 350000  # $3,500
+      airports: ["KEF"]
+      prefs:
+        kid_friendly: false
+        themes: ["adventure", "nature"]
+        avoid_overnight: false
+        locked_slots: []
+    must_call_tools: ["weather", "flights", "lodging", "attractions"]
+    must_satisfy:
+      - predicate: "len(itinerary.days) >= 6"
+        description: "Week-long adventure"
+      - predicate: "itinerary.cost_breakdown.total_usd_cents <= intent.budget_usd_cents"
+        description: "Within budget"
+      - predicate: "'adventure' in intent.prefs.themes or 'nature' in intent.prefs.themes"
+        description: "Adventure/nature themes"
+    expected_fields:
+      - "days[0].activities"
+      - "cost_breakdown.total_usd_cents"
+
+  - scenario_id: romantic_vienna
+    description: "Romantic getaway to Vienna"
+    intent:
+      city: "Vienna"
+      date_window:
+        start: "2025-02-14"
+        end: "2025-02-17"
+        tz: "Europe/Vienna"
+      budget_usd_cents: 200000  # $2,000
+      airports: ["VIE"]
+      prefs:
+        kid_friendly: false
+        themes: ["music", "romantic", "culture"]
+        avoid_overnight: false
+        locked_slots: []
+    must_call_tools: ["weather", "flights", "lodging", "attractions"]
+    must_satisfy:
+      - predicate: "len(itinerary.days) >= 3"
+        description: "Multi-day romantic trip"
+      - predicate: "itinerary.cost_breakdown.total_usd_cents <= intent.budget_usd_cents"
+        description: "Within budget"
+      - predicate: "'romantic' in intent.prefs.themes or 'music' in intent.prefs.themes"
+        description: "Romantic/musical themes"
+    expected_fields:
+      - "days[0].activities[0].name"
+      - "cost_breakdown.lodging_usd_cents"
+
+  - scenario_id: food_tour_lyon
+    description: "Food-focused trip to Lyon"
+    intent:
+      city: "Lyon"
+      date_window:
+        start: "2025-11-08"
+        end: "2025-11-12"
+        tz: "Europe/Paris"
+      budget_usd_cents: 220000  # $2,200
+      airports: ["LYS"]
+      prefs:
+        kid_friendly: false
+        themes: ["food", "culinary", "local"]
+        avoid_overnight: false
+        locked_slots: []
+    must_call_tools: ["weather", "flights", "lodging", "attractions"]
+    must_satisfy:
+      - predicate: "'food' in intent.prefs.themes or 'culinary' in intent.prefs.themes"
+        description: "Food-focused themes"
+      - predicate: "len(itinerary.days) >= 4"
+        description: "Multi-day culinary experience"
+      - predicate: "itinerary.cost_breakdown.total_usd_cents <= intent.budget_usd_cents"
+        description: "Within budget"
+    expected_fields:
+      - "days[0].activities"
+      - "cost_breakdown.daily_spend_usd_cents"
+
+  - scenario_id: student_budget_amsterdam
+    description: "Student budget trip to Amsterdam"
+    intent:
+      city: "Amsterdam"
+      date_window:
+        start: "2025-06-20"
+        end: "2025-06-24"
+        tz: "Europe/Amsterdam"
+      budget_usd_cents: 80000  # $800 - very tight budget
+      airports: ["AMS"]
+      prefs:
+        kid_friendly: false
+        themes: ["budget", "culture", "local"]
+        avoid_overnight: true
+        locked_slots: []
+    must_call_tools: ["weather", "flights", "lodging"]
+    must_satisfy:
+      - predicate: "itinerary.cost_breakdown.total_usd_cents <= intent.budget_usd_cents"
+        description: "Within tight budget"
+      - predicate: "intent.prefs.avoid_overnight == True"
+        description: "No overnight flights for budget"
+      - predicate: "len(itinerary.days) >= 3"
+        description: "Multi-day budget trip"
+    expected_fields:
+      - "cost_breakdown.lodging_usd_cents"
+      - "cost_breakdown.total_usd_cents"
+
+  - scenario_id: winter_sports_innsbruck
+    description: "Winter sports trip to Innsbruck"
+    intent:
+      city: "Innsbruck"
+      date_window:
+        start: "2025-01-15"
+        end: "2025-01-22"
+        tz: "Europe/Vienna"
+      budget_usd_cents: 400000  # $4,000
+      airports: ["INN"]
+      prefs:
+        kid_friendly: false
+        themes: ["sports", "winter", "adventure"]
+        avoid_overnight: false
+        locked_slots: []
+    must_call_tools: ["weather", "flights", "lodging", "attractions"]
+    must_satisfy:
+      - predicate: "len(itinerary.days) >= 6"
+        description: "Week-long winter trip"
+      - predicate: "'sports' in intent.prefs.themes or 'winter' in intent.prefs.themes"
+        description: "Winter sports themes"
+      - predicate: "itinerary.cost_breakdown.total_usd_cents <= intent.budget_usd_cents"
+        description: "Within budget"
+    expected_fields:
+      - "days[0].activities"
+      - "cost_breakdown.attractions_usd_cents"

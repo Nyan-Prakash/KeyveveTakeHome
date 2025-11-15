@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.db.agent_events import append_event
 from backend.app.db.models.agent_run import AgentRun
+from backend.app.db.session import get_session_factory
 from backend.app.models.intent import IntentV1
 
 from .nodes import (
@@ -24,6 +25,18 @@ from .nodes import (
     verifier_node,
 )
 from .state import OrchestratorState
+
+# Mapping of node names to functions for manual execution with timing tracking
+NODE_FUNCTIONS = {
+    "intent": intent_node,
+    "planner": planner_node,
+    "selector": selector_node,
+    "tool_exec": tool_exec_node,
+    "verifier": verifier_node,
+    "repair": repair_node,
+    "synth": synth_node,
+    "responder": responder_node,
+}
 
 
 def _build_graph() -> Any:
@@ -63,7 +76,6 @@ def _build_graph() -> Any:
 
 
 def _execute_graph(
-    session: Session,
     run_id: UUID,
     org_id: UUID,
     user_id: UUID,
@@ -77,7 +89,6 @@ def _execute_graph(
     as it progresses through nodes.
 
     Args:
-        session: Database session
         run_id: Agent run ID
         org_id: Organization ID
         user_id: User ID
@@ -85,10 +96,11 @@ def _execute_graph(
         intent: User intent
         seed: Random seed for determinism
     """
-    try:
-        # Build graph
-        graph = _build_graph()
+    # Create our own database session for the background thread
+    factory = get_session_factory()
+    session = factory()
 
+    try:
         # Initialize state
         initial_state = OrchestratorState(
             trace_id=trace_id,
@@ -126,9 +138,15 @@ def _execute_graph(
                 },
             )
 
-            # Execute node
-            node_fn = graph.nodes[node_name].func
+            # Execute node and track timing
+            node_start = datetime.now(UTC)
+            node_fn = NODE_FUNCTIONS[node_name]
             current_state = node_fn(current_state)
+            node_end = datetime.now(UTC)
+
+            # Track node timing
+            latency_ms = int((node_end - node_start).total_seconds() * 1000)
+            current_state.node_timings[node_name] = latency_ms
 
             # Emit node completion event
             append_event(
@@ -144,14 +162,35 @@ def _execute_graph(
                 },
             )
 
-        # Update agent run with final status
+        # Update agent run with final status and save itinerary in single transaction
         agent_run = session.get(AgentRun, run_id)
         if agent_run:
             agent_run.status = "completed"
             agent_run.completed_at = datetime.now(UTC)
             if current_state.plan:
                 agent_run.plan_snapshot = [current_state.plan.model_dump(mode="json")]
-            session.commit()
+
+            # Save tool metrics and node timings
+            # Note: Always set tool_log even if empty to ensure consistency
+            agent_run.tool_log = {
+                "node_timings": current_state.node_timings,
+                "tool_call_counts": current_state.tool_call_counts,
+            }
+
+        # Save the itinerary to the database
+        if current_state.itinerary:
+            from backend.app.db.models.itinerary import Itinerary
+
+            itinerary_record = Itinerary(
+                org_id=org_id,
+                run_id=run_id,
+                user_id=user_id,
+                data=current_state.itinerary.model_dump(mode="json"),
+            )
+            session.add(itinerary_record)
+
+        # Commit both agent_run update and itinerary in single transaction
+        session.commit()
 
         # Emit final completion event
         append_event(
@@ -168,25 +207,32 @@ def _execute_graph(
         )
 
     except Exception as e:
-        # Handle errors
-        agent_run = session.get(AgentRun, run_id)
-        if agent_run:
-            agent_run.status = "error"
-            agent_run.completed_at = datetime.now(UTC)
-            session.commit()
+        # Handle errors - update run status
+        try:
+            agent_run = session.get(AgentRun, run_id)
+            if agent_run:
+                agent_run.status = "error"
+                agent_run.completed_at = datetime.now(UTC)
+                session.commit()
 
-        append_event(
-            session,
-            org_id,
-            run_id,
-            kind="node_event",
-            payload={
-                "node": "error",
-                "status": "error",
-                "ts": datetime.now(UTC).isoformat(),
-                "message": f"Error: {str(e)}",
-            },
-        )
+            append_event(
+                session,
+                org_id,
+                run_id,
+                kind="node_event",
+                payload={
+                    "node": "error",
+                    "status": "error",
+                    "ts": datetime.now(UTC).isoformat(),
+                    "message": f"Error: {str(e)}",
+                },
+            )
+        except Exception:
+            # If even error handling fails, we can't do much
+            pass
+    finally:
+        # Always close the session
+        session.close()
 
 
 def start_run(
@@ -252,11 +298,13 @@ def start_run(
             "message": "Starting agent run...",
         },
     )
+    session.commit()  # Commit the initial event
 
     # Start graph execution in background thread
+    # Note: Thread creates its own session to avoid lifecycle issues
     thread = threading.Thread(
         target=_execute_graph,
-        args=(session, run_id, org_id, user_id, trace_id, intent, seed),
+        args=(run_id, org_id, user_id, trace_id, intent, seed),
         daemon=True,
     )
     thread.start()

@@ -145,17 +145,153 @@ def main():
                             except json.JSONDecodeError:
                                 pass
 
-                # Show final itinerary summary
-                st.header("Itinerary Summary")
-                st.markdown(
-                    f"""
-                    **Destination:** {city}
-                    **Dates:** {start_date} to {end_date}
-                    **Budget:** ${budget}
+                # Fetch final itinerary details
+                try:
+                    itinerary_response = httpx.get(
+                        f"{API_BASE_URL}/plan/{run_id}",
+                        headers={"Authorization": f"Bearer {BEARER_TOKEN}"},
+                        timeout=10.0,
+                    )
+                    itinerary_response.raise_for_status()
+                    itinerary_data = itinerary_response.json()
 
-                    Your itinerary has been generated! Check the progress log above for details.
-                    """
-                )
+                    # Main itinerary + Right rail layout
+                    col_main, col_rail = st.columns([2, 1])
+
+                    with col_main:
+                        st.header("Itinerary Summary")
+                        st.markdown(
+                            f"""
+                            **Destination:** {city}
+                            **Dates:** {start_date} to {end_date}
+                            **Budget:** ${budget}
+                            """
+                        )
+
+                        # Show itinerary details if available
+                        if itinerary_data.get("itinerary"):
+                            itin = itinerary_data["itinerary"]
+
+                            # Cost breakdown
+                            cost = itin.get("cost_breakdown", {})
+                            st.subheader("Cost Breakdown")
+                            st.write(
+                                f"- Flights: ${cost.get('flights_usd_cents', 0) / 100:.2f}"
+                            )
+                            st.write(
+                                f"- Lodging: ${cost.get('lodging_usd_cents', 0) / 100:.2f}"
+                            )
+                            st.write(
+                                f"- Attractions: ${cost.get('attractions_usd_cents', 0) / 100:.2f}"
+                            )
+                            st.write(
+                                f"- Transit: ${cost.get('transit_usd_cents', 0) / 100:.2f}"
+                            )
+                            st.write(
+                                f"- Daily Spend: ${cost.get('daily_spend_usd_cents', 0) / 100:.2f}"
+                            )
+                            st.write(
+                                f"**Total: ${cost.get('total_usd_cents', 0) / 100:.2f}**"
+                            )
+
+                            if cost.get("currency_disclaimer"):
+                                st.caption(cost["currency_disclaimer"])
+
+                            # Daily activities
+                            st.subheader("Daily Plan")
+                            for day in itin.get("days", []):
+                                with st.expander(
+                                    f"Day {day.get('day_date')}", expanded=False
+                                ):
+                                    for act in day.get("activities", []):
+                                        st.markdown(
+                                            f"**{act['name']}** ({act['kind']})"
+                                        )
+                                        st.caption(
+                                            f"{act['window']['start']} - {act['window']['end']}"
+                                        )
+                                        if act.get("notes"):
+                                            st.write(act["notes"])
+                                        if act.get("locked"):
+                                            st.badge("🔒 Locked")
+                        else:
+                            st.info("Itinerary details not yet available")
+
+                    with col_rail:
+                        st.header("System Info")
+
+                        # Tools & Timings
+                        st.subheader("Tools Used")
+                        if itinerary_data.get("tool_call_counts"):
+                            for tool, count in itinerary_data[
+                                "tool_call_counts"
+                            ].items():
+                                st.write(f"- {tool}: {count} calls")
+                        else:
+                            st.caption("No tool metrics available")
+
+                        # Node timings
+                        st.subheader("Node Timings")
+                        if itinerary_data.get("node_timings"):
+                            for node, timing_ms in itinerary_data[
+                                "node_timings"
+                            ].items():
+                                st.write(f"- {node}: {timing_ms}ms")
+                        else:
+                            st.caption("No timing metrics available")
+
+                        # Checks & Violations
+                        st.subheader("Constraint Checks")
+                        violations = itinerary_data.get("violations", [])
+                        if violations:
+                            st.warning(f"{len(violations)} violations detected")
+                            for v in violations[:3]:  # Show first 3
+                                st.write(f"- {v.get('kind')}: {v.get('details')}")
+                        else:
+                            st.success("All constraints satisfied")
+
+                        # Decisions
+                        st.subheader("Key Decisions")
+                        if itinerary_data.get("itinerary", {}).get("decisions"):
+                            decisions = itinerary_data["itinerary"]["decisions"]
+                            for dec in decisions[:3]:  # Show first 3
+                                st.write(
+                                    f"**{dec['node']}**: {dec['rationale'][:60]}..."
+                                )
+                                st.caption(
+                                    f"{dec['alternatives_considered']} alternatives"
+                                )
+                        else:
+                            st.caption("No decisions recorded")
+
+                        # Citations
+                        st.subheader("Citations")
+                        if itinerary_data.get("itinerary", {}).get("citations"):
+                            citations = itinerary_data["itinerary"]["citations"]
+                            st.metric("Total Citations", len(citations))
+                            with st.expander("View Citations", expanded=False):
+                                for i, cite in enumerate(
+                                    citations[:10], 1
+                                ):  # Show first 10
+                                    st.caption(f"{i}. {cite['claim'][:50]}...")
+                                    prov = cite.get("provenance", {})
+                                    st.caption(
+                                        f"   Source: {prov.get('source')} @ {prov.get('fetched_at', 'N/A')[:10]}"
+                                    )
+                        else:
+                            st.caption("No citations available")
+
+                except httpx.HTTPError as e:
+                    st.error(f"Error fetching itinerary: {e}")
+                    st.markdown(
+                        f"""
+                        **Destination:** {city}
+                        **Dates:** {start_date} to {end_date}
+                        **Budget:** ${budget}
+
+                        Your itinerary has been generated! Check the progress log above for details.
+                        """
+                    )
 
             except httpx.HTTPError as e:
                 st.error(f"Error: {e}")

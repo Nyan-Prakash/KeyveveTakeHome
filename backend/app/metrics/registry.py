@@ -64,6 +64,13 @@ class MetricsClient:
         # Reuse ratios: list of reuse ratios (0-1)
         self.repair_reuse_ratios: list[float] = []
 
+        # Synthesis metrics (PR9)
+        # Synthesis latency observations in milliseconds
+        self.synthesis_latencies: list[int] = []
+
+        # Citation coverage: (total_citations, total_claims)
+        self.citation_coverage: list[tuple[int, int]] = []
+
     def observe_tool_latency(self, tool: str, status: str, latency_ms: int) -> None:
         """Record a tool latency observation."""
         self.tool_latencies[tool].append((status, latency_ms))
@@ -198,6 +205,29 @@ class MetricsClient:
             ),
         }
 
+    def observe_synthesis_latency(self, latency_ms: int) -> None:
+        """Record synthesis latency in milliseconds."""
+        self.synthesis_latencies.append(latency_ms)
+
+    def observe_citation_coverage(
+        self, total_citations: int, total_claims: int
+    ) -> None:
+        """Record citation coverage for a synthesis run."""
+        self.citation_coverage.append((total_citations, total_claims))
+
+    def get_citation_coverage_ratio(self) -> float:
+        """Get average citation coverage ratio."""
+        if not self.citation_coverage:
+            return 0.0
+
+        total_cites = sum(c for c, _ in self.citation_coverage)
+        total_claims = sum(cl for _, cl in self.citation_coverage)
+
+        if total_claims == 0:
+            return 0.0
+
+        return total_cites / total_claims
+
     def reset(self) -> None:
         """Reset all metrics (useful for testing)."""
         self.tool_latencies.clear()
@@ -219,3 +249,6 @@ class MetricsClient:
         self.repair_cycles.clear()
         self.repair_moves.clear()
         self.repair_reuse_ratios.clear()
+        # PR9 metrics
+        self.synthesis_latencies.clear()
+        self.citation_coverage.clear()

@@ -10,7 +10,6 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
-from pgvector.sqlalchemy import Vector
 
 # revision identifiers, used by Alembic.
 revision: str = '001'
@@ -22,13 +21,26 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Create all PR2 tables with proper indexes and constraints."""
 
-    # Enable pgvector extension
-    op.execute('CREATE EXTENSION IF NOT EXISTS vector')
+    # Get the database dialect to handle PostgreSQL vs SQLite differences
+    bind = op.get_bind()
+    is_postgresql = bind.dialect.name == 'postgresql'
+    
+    if is_postgresql:
+        # Enable pgvector extension (PostgreSQL only)
+        op.execute('CREATE EXTENSION IF NOT EXISTS vector')
+        from pgvector.sqlalchemy import Vector
+        # Use PostgreSQL UUID type
+        uuid_type = postgresql.UUID(as_uuid=True)
+        vector_type = Vector(1536)  # OpenAI embedding dimension
+    else:
+        # Use SQLite compatible types
+        uuid_type = sa.String(36)  # Store UUIDs as strings in SQLite
+        vector_type = sa.TEXT()    # Store vectors as JSON text in SQLite
 
     # Create org table
     op.create_table(
         'org',
-        sa.Column('org_id', postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column('org_id', uuid_type, primary_key=True),
         sa.Column('name', sa.Text(), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
     )
@@ -36,8 +48,8 @@ def upgrade() -> None:
     # Create user table
     op.create_table(
         'user',
-        sa.Column('user_id', postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column('org_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('user_id', uuid_type, primary_key=True),
+        sa.Column('org_id', uuid_type, nullable=False),
         sa.Column('email', sa.Text(), nullable=False),
         sa.Column('password_hash', sa.Text(), nullable=False),
         sa.Column('locked_until', sa.DateTime(timezone=True), nullable=True),
@@ -50,8 +62,8 @@ def upgrade() -> None:
     # Create refresh_token table
     op.create_table(
         'refresh_token',
-        sa.Column('token_id', postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column('user_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('token_id', uuid_type, primary_key=True),
+        sa.Column('user_id', uuid_type, nullable=False),
         sa.Column('token_hash', sa.Text(), nullable=False),
         sa.Column('expires_at', sa.DateTime(timezone=True), nullable=False),
         sa.Column('revoked', sa.Boolean(), nullable=False, server_default='false'),
@@ -63,11 +75,11 @@ def upgrade() -> None:
     # Create destination table
     op.create_table(
         'destination',
-        sa.Column('dest_id', postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column('org_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('dest_id', uuid_type, primary_key=True),
+        sa.Column('org_id', uuid_type, nullable=False),
         sa.Column('city', sa.Text(), nullable=False),
         sa.Column('country', sa.Text(), nullable=False),
-        sa.Column('geo', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column('geo', sa.JSON() if is_postgresql else sa.Text(), nullable=False),
         sa.Column('fixture_path', sa.Text(), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(['org_id'], ['org.org_id'], ondelete='CASCADE'),
@@ -77,40 +89,42 @@ def upgrade() -> None:
     # Create knowledge_item table
     op.create_table(
         'knowledge_item',
-        sa.Column('item_id', postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column('org_id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('dest_id', postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column('item_id', uuid_type, primary_key=True),
+        sa.Column('org_id', uuid_type, nullable=False),
+        sa.Column('dest_id', uuid_type, nullable=True),
         sa.Column('content', sa.Text(), nullable=False),
-        sa.Column('item_metadata', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column('item_metadata', sa.JSON() if is_postgresql else sa.Text(), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(['org_id'], ['org.org_id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['dest_id'], ['destination.dest_id'], ondelete='SET NULL'),
     )
     op.create_index('idx_knowledge_org_dest', 'knowledge_item', ['org_id', 'dest_id'])
 
-    # Create embedding table (pgvector)
+    # Create embedding table 
     op.create_table(
         'embedding',
-        sa.Column('embedding_id', postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column('item_id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('vector', Vector(1536), nullable=False),
+        sa.Column('embedding_id', uuid_type, primary_key=True),
+        sa.Column('item_id', uuid_type, nullable=False),
+        sa.Column('vector', vector_type, nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(['item_id'], ['knowledge_item.item_id'], ondelete='CASCADE'),
     )
-    # Create ivfflat index for vector similarity search
-    op.execute(
-        'CREATE INDEX idx_embedding_vector ON embedding USING ivfflat (vector vector_cosine_ops) WITH (lists = 100)'
-    )
+    
+    # Create vector index (PostgreSQL only)
+    if is_postgresql:
+        op.execute(
+            'CREATE INDEX idx_embedding_vector ON embedding USING ivfflat (vector vector_cosine_ops) WITH (lists = 100)'
+        )
 
     # Create agent_run table
     op.create_table(
         'agent_run',
-        sa.Column('run_id', postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column('org_id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('user_id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('intent', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-        sa.Column('plan_snapshot', postgresql.ARRAY(postgresql.JSONB(astext_type=sa.Text())), nullable=True),
-        sa.Column('tool_log', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column('run_id', uuid_type, primary_key=True),
+        sa.Column('org_id', uuid_type, nullable=False),
+        sa.Column('user_id', uuid_type, nullable=False),
+        sa.Column('intent', sa.JSON() if is_postgresql else sa.Text(), nullable=False),
+        sa.Column('plan_snapshot', sa.JSON() if is_postgresql else sa.Text(), nullable=True),
+        sa.Column('tool_log', sa.JSON() if is_postgresql else sa.Text(), nullable=True),
         sa.Column('cost_usd', sa.Numeric(10, 6), nullable=True),
         sa.Column('trace_id', sa.Text(), nullable=False),
         sa.Column('status', sa.Text(), nullable=False),
@@ -124,11 +138,11 @@ def upgrade() -> None:
     # Create itinerary table
     op.create_table(
         'itinerary',
-        sa.Column('itinerary_id', postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column('org_id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('run_id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('user_id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('data', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column('itinerary_id', uuid_type, primary_key=True),
+        sa.Column('org_id', uuid_type, nullable=False),
+        sa.Column('run_id', uuid_type, nullable=False),
+        sa.Column('user_id', uuid_type, nullable=False),
+        sa.Column('data', sa.JSON() if is_postgresql else sa.Text(), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(['org_id'], ['org.org_id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['run_id'], ['agent_run.run_id'], ondelete='CASCADE'),
@@ -141,20 +155,26 @@ def upgrade() -> None:
     op.create_table(
         'idempotency',
         sa.Column('key', sa.Text(), primary_key=True),
-        sa.Column('user_id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('org_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('user_id', uuid_type, nullable=False),
+        sa.Column('org_id', uuid_type, nullable=False),
         sa.Column('ttl_until', sa.DateTime(timezone=True), nullable=False),
         sa.Column('status', sa.Text(), nullable=False),
         sa.Column('body_hash', sa.Text(), nullable=False),
         sa.Column('headers_hash', sa.Text(), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
     )
-    op.create_index(
-        'idx_idempotency_ttl',
-        'idempotency',
-        ['ttl_until'],
-        postgresql_where=sa.text("status = 'completed'")
-    )
+    
+    # Create conditional index (PostgreSQL syntax)
+    if is_postgresql:
+        op.create_index(
+            'idx_idempotency_ttl',
+            'idempotency',
+            ['ttl_until'],
+            postgresql_where=sa.text("status = 'completed'")
+        )
+    else:
+        # SQLite doesn't support conditional indexes with WHERE clause in the same way
+        op.create_index('idx_idempotency_ttl', 'idempotency', ['ttl_until'])
 
 
 def downgrade() -> None:
