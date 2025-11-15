@@ -22,15 +22,24 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Create agent_run_event table for SSE streaming."""
 
+    # Get the database dialect to handle PostgreSQL vs SQLite differences
+    bind = op.get_bind()
+    is_postgresql = bind.dialect.name == 'postgresql'
+    
+    if is_postgresql:
+        uuid_type = postgresql.UUID(as_uuid=True)
+    else:
+        uuid_type = sa.String(36)  # Store UUIDs as strings in SQLite
+
     # Create agent_run_event table
     op.create_table(
         "agent_run_event",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column("run_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("org_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("run_id", uuid_type, nullable=False),
+        sa.Column("org_id", uuid_type, nullable=False),
         sa.Column("ts", sa.DateTime(timezone=True), nullable=False),
         sa.Column("kind", sa.Text(), nullable=False),
-        sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("payload", sa.JSON() if is_postgresql else sa.Text(), nullable=False),
         sa.ForeignKeyConstraint(
             ["run_id"], ["agent_run.run_id"], ondelete="CASCADE"
         ),

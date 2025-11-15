@@ -4,8 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Index, Numeric, Text
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy import DateTime, ForeignKey, Index, Numeric, Text, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.app.db.base import Base
@@ -29,11 +28,11 @@ class AgentRun(Base):
     user_id: Mapped[UUID] = mapped_column(
         ForeignKey("user.user_id", ondelete="CASCADE"), nullable=False
     )
-    intent: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    intent: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     plan_snapshot: Mapped[list[dict[str, Any]] | None] = mapped_column(
-        ARRAY(JSONB), nullable=True
+        JSON, nullable=True
     )
-    tool_log: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    tool_log: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     cost_usd: Mapped[float | None] = mapped_column(Numeric(10, 6), nullable=True)
     trace_id: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(

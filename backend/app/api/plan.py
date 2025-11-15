@@ -225,3 +225,102 @@ async def stream_plan(
             await asyncio.sleep(0.1)
 
     return EventSourceResponse(event_generator())
+
+
+@router.get("/{run_id}")
+def get_plan(
+    run_id: UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    session: Session = Depends(get_db_session),
+) -> dict[str, Any]:
+    """Get the final itinerary and metadata for a completed run.
+
+    Returns the full itinerary plus system info for the right-rail UI:
+    - itinerary: ItineraryV1 with days, cost_breakdown, decisions, citations
+    - violations: List of constraint violations
+    - node_timings: Execution time per node (if available)
+    - tool_call_counts: Tool usage counts (if available)
+    - status: Run status (running/completed/error)
+
+    Args:
+        run_id: Agent run ID
+        current_user: Authenticated user context
+        session: Database session
+
+    Returns:
+        Dict with itinerary and metadata
+
+    Raises:
+        HTTPException: 404 if run not found, 403 if org mismatch
+    """
+    # Load agent run and verify org scoping
+    stmt = select(AgentRun).where(AgentRun.run_id == run_id)
+    agent_run = session.execute(stmt).scalar_one_or_none()
+
+    if not agent_run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent run not found",
+        )
+
+    if agent_run.org_id != current_user.org_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied to this run",
+        )
+
+    # Load the itinerary if it exists
+    from backend.app.db.models.itinerary import Itinerary
+
+    stmt = select(Itinerary).where(Itinerary.run_id == run_id)
+    itinerary_record = session.execute(stmt).scalar_one_or_none()
+
+    # Build response
+    response: dict[str, Any] = {
+        "run_id": str(run_id),
+        "status": agent_run.status,
+        "created_at": (
+            agent_run.created_at.isoformat() if agent_run.created_at else None
+        ),
+        "completed_at": (
+            agent_run.completed_at.isoformat() if agent_run.completed_at else None
+        ),
+    }
+
+    # Add itinerary if available
+    if itinerary_record:
+        response["itinerary"] = itinerary_record.data
+
+    # Extract violations from plan_snapshot if available
+    # (Last snapshot typically contains final state with violations)
+    if agent_run.plan_snapshot and len(agent_run.plan_snapshot) > 0:
+        last_snapshot = agent_run.plan_snapshot[-1]
+        if "violations" in last_snapshot:
+            response["violations"] = last_snapshot["violations"]
+        else:
+            response["violations"] = []
+    else:
+        response["violations"] = []
+
+    # Extract tool metrics from tool_log if available
+    if agent_run.tool_log:
+        # Tool call counts
+        if "tool_call_counts" in agent_run.tool_log:
+            response["tool_call_counts"] = agent_run.tool_log["tool_call_counts"]
+        else:
+            response["tool_call_counts"] = {}
+
+        # Node timings
+        if "node_timings" in agent_run.tool_log:
+            response["node_timings"] = agent_run.tool_log["node_timings"]
+        else:
+            response["node_timings"] = {}
+    else:
+        response["tool_call_counts"] = {}
+        response["node_timings"] = {}
+
+    # Add cost if available
+    if agent_run.cost_usd is not None:
+        response["cost_usd"] = float(agent_run.cost_usd)
+
+    return response

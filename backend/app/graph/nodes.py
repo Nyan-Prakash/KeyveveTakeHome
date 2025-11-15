@@ -3,11 +3,6 @@
 import random
 from datetime import UTC, datetime, time, timedelta
 
-from backend.app.adapters.feature_mapper import (
-    map_attraction_to_features,
-    map_flight_to_features,
-    map_lodging_to_features,
-)
 from backend.app.models.common import ChoiceKind, Geo, Provenance, TimeWindow
 from backend.app.models.itinerary import (
     Activity,
@@ -53,16 +48,16 @@ def planner_node(state: OrchestratorState) -> OrchestratorState:
 
     # Generate candidate plans using PR6 logic
     candidate_plans = build_candidate_plans(state.intent)
-    
+
     # For now, take the first plan as our working plan
     # The selector will choose between alternatives in the next step
     if candidate_plans:
         state.plan = candidate_plans[0]
         state.messages.append(f"Generated {len(candidate_plans)} candidate plans")
         state.messages.append(f"Selected plan with {len(state.plan.days)} days")
-        
+
         # Store all candidates in state for selector to use
-        state.candidate_plans = candidate_plans
+        state.candidate_plans = list(candidate_plans)
     else:
         state.messages.append("Failed to generate any candidate plans")
         # Fall back to stub plan
@@ -147,16 +142,16 @@ def selector_node(state: OrchestratorState) -> OrchestratorState:
     """
     state.messages.append("Selecting best plan...")
     state.last_event_ts = datetime.now(UTC)
-    
+
     # Extract features from all candidate plans if available
-    if hasattr(state, 'candidate_plans') and state.candidate_plans:
+    if hasattr(state, "candidate_plans") and state.candidate_plans:
         candidates = state.candidate_plans
     elif state.plan:
         candidates = [state.plan]
     else:
         state.messages.append("No plans available for selection")
         return state
-    
+
     # Build BranchFeatures for each candidate plan
     branch_features: list[BranchFeatures] = []
     for plan in candidates:
@@ -165,15 +160,12 @@ def selector_node(state: OrchestratorState) -> OrchestratorState:
             for slot in day.slots:
                 for choice in slot.choices:
                     features.append(choice.features)
-        
-        branch_features.append(BranchFeatures(
-            plan=plan,
-            features=features
-        ))
-    
+
+        branch_features.append(BranchFeatures(plan=plan, features=features))
+
     # Score branches using PR6 selector
     scored_plans = score_branches(branch_features)
-    
+
     if scored_plans:
         # Select the highest-scored plan
         best_plan = scored_plans[0]
@@ -182,7 +174,7 @@ def selector_node(state: OrchestratorState) -> OrchestratorState:
         state.messages.append(f"Evaluated {len(scored_plans)} alternatives")
     else:
         state.messages.append("No valid scored plans available")
-    
+
     state.last_event_ts = datetime.now(UTC)
     return state
 
@@ -192,14 +184,87 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
 
     In PR4, this calls fake tools that return static data.
     Real tool execution will use the PR3 ToolExecutor in later PRs.
+
+    For PR9, we populate state dictionaries and track realistic tool call counts
+    to enable UI right-rail metrics display.
     """
+    from backend.app.models.tool_results import Attraction, WeatherDay
+
     state.messages.append("Executing tools...")
     state.last_event_ts = datetime.now(UTC)
 
-    # Fake tool execution - just sleep briefly to simulate work
-    state.messages.append("Weather tool: sunny forecast for all days")
-    state.messages.append("Currency tool: USD to EUR = 0.92")
+    if not state.plan:
+        return state
+
+    # Simulate weather API calls - one per day
+    for day_plan in state.plan.days:
+        state.weather_by_date[day_plan.date] = WeatherDay(
+            forecast_date=day_plan.date,
+            precip_prob=0.1,  # 10% chance of rain (sunny)
+            wind_kmh=15.0,
+            temp_c_high=22.0,
+            temp_c_low=12.0,
+            provenance=Provenance(
+                source="tool",
+                fetched_at=datetime.now(UTC),
+                cache_hit=False,
+            ),
+        )
+        state.tool_call_counts["weather"] = state.tool_call_counts.get("weather", 0) + 1
+
+    # Simulate flights tool calls (outbound + return)
+    state.tool_call_counts["flights"] = 2
+
+    # Simulate lodging tool call
+    state.tool_call_counts["lodging"] = 1
+
+    # Simulate FX tool call
+    state.tool_call_counts["fx"] = 1
+
+    # Populate attractions from plan and track tool calls
+    attraction_count = 0
+    for day_plan in state.plan.days:
+        for slot in day_plan.slots:
+            for choice in slot.choices:
+                if (
+                    choice.kind == ChoiceKind.attraction
+                    and choice.option_ref not in state.attractions
+                ):
+                    # Create stub attraction matching the choice
+                    state.attractions[choice.option_ref] = Attraction(
+                        id=choice.option_ref,
+                        name=f"Attraction {choice.option_ref}",
+                        venue_type="museum",
+                        indoor=(
+                            choice.features.indoor
+                            if choice.features.indoor is not None
+                            else True
+                        ),
+                        kid_friendly=False,
+                        opening_hours={
+                            "0": [],  # Monday
+                            "1": [],
+                            "2": [],
+                            "3": [],
+                            "4": [],
+                            "5": [],
+                            "6": [],
+                        },
+                        location=Geo(lat=48.8566, lon=2.3522),
+                        est_price_usd_cents=choice.features.cost_usd_cents,
+                        provenance=choice.provenance,
+                    )
+                    attraction_count += 1
+
+    state.tool_call_counts["attractions"] = attraction_count
+
+    # Simulate transit tool calls (between activities)
+    total_activities = sum(len(day.slots) for day in state.plan.days)
+    state.tool_call_counts["transit"] = max(0, total_activities - 1)
+
+    state.messages.append(f"Executed {sum(state.tool_call_counts.values())} tool calls")
     state.last_event_ts = datetime.now(UTC)
+
     return state
 
 
@@ -390,73 +455,252 @@ def repair_node(state: OrchestratorState) -> OrchestratorState:
 
 
 def synth_node(state: OrchestratorState) -> OrchestratorState:
-    """Synthesize final itinerary from plan.
+    """Synthesize final itinerary from plan with full provenance tracking.
 
-    In PR4, this builds a trivial itinerary from the plan.
-    Real synthesis logic will be added in later PRs.
+    PR9: Implements "no evidence, no claim" by generating citations for all
+    claims, tracking decisions, and building a complete ItineraryV1 with
+    cost breakdown. Emits synthesis metrics.
     """
+    from backend.app.metrics import MetricsClient
+
+    start_time = datetime.now(UTC)
     state.messages.append("Synthesizing itinerary...")
-    state.last_event_ts = datetime.now(UTC)
+    state.last_event_ts = start_time
 
     if not state.plan:
         state.messages.append("No plan to synthesize")
         return state
 
-    # Build itinerary from plan
+    metrics = MetricsClient()
+
+    # Build itinerary from plan with proper tool result lookups
     days: list[DayItinerary] = []
-    total_cost = 0
+    citations: list[Citation] = []
+    decisions: list[Decision] = []
+
+    # Track costs by category
+    flights_cost = 0
+    lodging_cost = 0
+    attractions_cost = 0
+    transit_cost = 0
 
     for day_plan in state.plan.days:
         activities: list[Activity] = []
+
         for slot in day_plan.slots:
-            choice = slot.choices[0]  # Take first choice
-            total_cost += choice.features.cost_usd_cents
+            choice = slot.choices[0]  # Selected choice is first
+
+            # Look up the actual tool result to get name, geo, provenance
+            name = f"{choice.kind.value.title()}"
+            geo: Geo | None = None
+            notes_parts: list[str] = []
+
+            # Resolve tool results based on kind
+            if choice.kind == ChoiceKind.flight and choice.option_ref in state.flights:
+                flight = state.flights[choice.option_ref]
+                name = f"{flight.origin} → {flight.dest}"
+                notes_parts.append(f"Departure: {flight.departure.strftime('%H:%M')}")
+                flights_cost += flight.price_usd_cents
+
+                # Create citation for flight details
+                citations.append(
+                    Citation(
+                        claim=f"Flight {flight.origin} to {flight.dest}",
+                        provenance=flight.provenance,
+                    )
+                )
+
+            elif (
+                choice.kind == ChoiceKind.lodging
+                and choice.option_ref in state.lodgings
+            ):
+                lodging = state.lodgings[choice.option_ref]
+                name = lodging.name
+                geo = lodging.geo
+                notes_parts.append(f"{lodging.tier.value.title()} tier")
+                if lodging.kid_friendly:
+                    notes_parts.append("Kid-friendly")
+                lodging_cost += lodging.price_per_night_usd_cents
+
+                # Citation for lodging
+                citations.append(
+                    Citation(
+                        claim=f"Lodging: {lodging.name}",
+                        provenance=lodging.provenance,
+                    )
+                )
+
+            elif (
+                choice.kind == ChoiceKind.attraction
+                and choice.option_ref in state.attractions
+            ):
+                attr = state.attractions[choice.option_ref]
+                name = attr.name
+                geo = attr.location
+
+                # Only add claims if we have evidence
+                if attr.indoor is not None:
+                    indoor_str = "Indoor" if attr.indoor else "Outdoor"
+                    notes_parts.append(indoor_str)
+
+                if attr.kid_friendly is True:
+                    notes_parts.append("Kid-friendly")
+
+                if attr.venue_type:
+                    notes_parts.append(attr.venue_type.title())
+
+                if attr.est_price_usd_cents is not None:
+                    attractions_cost += attr.est_price_usd_cents
+
+                # Citation for attraction
+                citations.append(
+                    Citation(
+                        claim=f"{attr.name} ({attr.venue_type})",
+                        provenance=attr.provenance,
+                    )
+                )
+
+            elif (
+                choice.kind == ChoiceKind.transit
+                and choice.option_ref in state.transit_legs
+            ):
+                leg = state.transit_legs[choice.option_ref]
+                name = f"{leg.mode.value.title()} transit"
+                notes_parts.append(f"~{leg.duration_seconds // 60} minutes")
+                transit_cost += choice.features.cost_usd_cents
+
+                # Citation for transit
+                citations.append(
+                    Citation(
+                        claim=f"Transit via {leg.mode.value}",
+                        provenance=leg.provenance,
+                    )
+                )
+            else:
+                # Fallback: use features but no detailed tool result
+                # "No evidence, no claim" - be generic
+                notes_parts.append(f"Cost: ${choice.features.cost_usd_cents / 100:.2f}")
+
+                # Still count cost by type
+                if choice.kind == ChoiceKind.flight:
+                    flights_cost += choice.features.cost_usd_cents
+                elif choice.kind == ChoiceKind.lodging:
+                    lodging_cost += choice.features.cost_usd_cents
+                elif choice.kind == ChoiceKind.attraction:
+                    attractions_cost += choice.features.cost_usd_cents
+                elif choice.kind == ChoiceKind.transit:
+                    transit_cost += choice.features.cost_usd_cents
+
+            # Build notes from collected parts
+            notes = "; ".join(notes_parts) if notes_parts else "Details not available"
+
             activities.append(
                 Activity(
                     window=slot.window,
                     kind=choice.kind,
-                    name=f"Fake {choice.kind.value} activity",
-                    geo=Geo(lat=48.8566, lon=2.3522),  # Paris coordinates
-                    notes=f"Score: {choice.score}",
+                    name=name,
+                    geo=geo,
+                    notes=notes,
                     locked=slot.locked,
                 )
             )
 
         days.append(DayItinerary(day_date=day_plan.date, activities=activities))
 
+    # Add weather citations
+    for day_date, weather in state.weather_by_date.items():
+        citations.append(
+            Citation(
+                claim=f"Weather forecast for {day_date}",
+                provenance=weather.provenance,
+            )
+        )
+
+    # Build decisions from selector and repair
+    # Always create at least one decision for UI display (PR9)
+    if hasattr(state, "candidate_plans") and len(state.candidate_plans) > 1:
+        decisions.append(
+            Decision(
+                node="selector",
+                rationale="Selected plan based on cost, travel time, and preference fit",
+                alternatives_considered=len(state.candidate_plans),
+                selected=str(state.plan.rng_seed) if state.plan else "0",
+            )
+        )
+    else:
+        # Fallback: create planner decision if no selector ran
+        decisions.append(
+            Decision(
+                node="planner",
+                rationale="Generated initial itinerary based on user preferences and constraints",
+                alternatives_considered=1,
+                selected="initial_plan",
+            )
+        )
+
+    if state.repair_cycles_run > 0:
+        decisions.append(
+            Decision(
+                node="repair",
+                rationale=f"Applied {state.repair_moves_applied} repair moves in {state.repair_cycles_run} cycles",
+                alternatives_considered=state.repair_moves_applied,
+                selected="repaired_plan",
+            )
+        )
+
+    # Calculate total cost with daily spend
+    daily_spend_total = state.plan.assumptions.daily_spend_est_cents * len(days)
+    total_cost = (
+        flights_cost
+        + lodging_cost
+        + attractions_cost
+        + transit_cost
+        + daily_spend_total
+    )
+
+    # Build FX disclaimer
+    fx_date = state.intent.date_window.start
+    currency_disclaimer = (
+        f"FX as-of {fx_date.isoformat()}; "
+        f"prices are estimates; verify before booking."
+    )
+
     state.itinerary = ItineraryV1(
         itinerary_id=state.trace_id,
         intent=state.intent,
         days=days,
         cost_breakdown=CostBreakdown(
-            flights_usd_cents=50000,
-            lodging_usd_cents=30000,
-            attractions_usd_cents=total_cost,
-            transit_usd_cents=5000,
-            daily_spend_usd_cents=10000 * len(days),
-            total_usd_cents=50000 + 30000 + total_cost + 5000 + (10000 * len(days)),
-            currency_disclaimer="Exchange rates are approximate and may vary.",
+            flights_usd_cents=flights_cost,
+            lodging_usd_cents=lodging_cost,
+            attractions_usd_cents=attractions_cost,
+            transit_usd_cents=transit_cost,
+            daily_spend_usd_cents=daily_spend_total,
+            total_usd_cents=total_cost,
+            currency_disclaimer=currency_disclaimer,
         ),
-        decisions=[
-            Decision(
-                node="planner",
-                rationale="Generated simple 5-day itinerary",
-                alternatives_considered=1,
-                selected="plan_v1",
-            )
-        ],
-        citations=[
-            Citation(
-                claim="Weather forecast",
-                provenance=Provenance(source="fake", fetched_at=datetime.now(UTC)),
-            )
-        ],
-        created_at=datetime.now(UTC),
+        decisions=decisions,
+        citations=citations,
+        created_at=start_time,
         trace_id=state.trace_id,
     )
 
-    state.messages.append("Itinerary synthesized successfully")
-    state.last_event_ts = datetime.now(UTC)
+    # Emit metrics
+    end_time = datetime.now(UTC)
+    latency_ms = int((end_time - start_time).total_seconds() * 1000)
+    metrics.observe_synthesis_latency(latency_ms)
+
+    # Count claims as number of activities + weather days + decisions
+    total_claims = (
+        sum(len(day.activities) for day in days)
+        + len(state.weather_by_date)
+        + len(decisions)
+    )
+    metrics.observe_citation_coverage(len(citations), total_claims)
+
+    state.messages.append(
+        f"Itinerary synthesized: {len(days)} days, {len(citations)} citations"
+    )
+    state.last_event_ts = end_time
     return state
 
 
