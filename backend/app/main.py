@@ -5,7 +5,9 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.app.api.destinations import router as destinations_router
 from backend.app.api.health import get_health
+from backend.app.api.knowledge import router as knowledge_router
 from backend.app.api.plan import router as plan_router
 from backend.app.config import get_settings
 
@@ -41,6 +43,8 @@ def create_app() -> FastAPI:
         return result.model_dump()
 
     # Include routers
+    app.include_router(destinations_router)
+    app.include_router(knowledge_router)
     app.include_router(plan_router)
 
     return app

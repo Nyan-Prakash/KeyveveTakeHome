@@ -1,6 +1,6 @@
 """Agent run ORM model."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
@@ -41,7 +41,7 @@ class AgentRun(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(datetime.UTC),
+        default=lambda: datetime.now(timezone.utc),
     )
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

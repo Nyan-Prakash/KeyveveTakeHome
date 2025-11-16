@@ -1,6 +1,6 @@
 """User ORM model."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
@@ -35,7 +35,7 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(datetime.UTC),
+        default=lambda: datetime.now(timezone.utc),
     )
 
     # Relationships

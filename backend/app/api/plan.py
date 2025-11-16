@@ -29,6 +29,15 @@ class StartPlanResponse(BaseModel):
     run_id: UUID
 
 
+class EditPlanRequest(BaseModel):
+    """Request to edit an existing plan with what-if changes."""
+
+    delta_budget_usd_cents: int | None = None
+    shift_dates_days: int | None = None
+    new_prefs: dict[str, Any] | None = None
+    description: str | None = None  # Human-readable description of the change
+
+
 def get_db_session() -> Generator[Session, None, None]:
     """Dependency to get a database session."""
     factory = get_session_factory()
@@ -324,3 +333,107 @@ def get_plan(
         response["cost_usd"] = float(agent_run.cost_usd)
 
     return response
+
+
+@router.post("/{run_id}/edit", response_model=StartPlanResponse, status_code=status.HTTP_201_CREATED)
+def edit_plan(
+    run_id: UUID,
+    edit_request: EditPlanRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+    session: Session = Depends(get_db_session),
+) -> StartPlanResponse:
+    """Apply what-if edits to an existing plan and create a new run.
+
+    This endpoint allows users to make iterative refinements to their itinerary:
+    - Change budget (e.g., "Make it $300 cheaper")
+    - Shift dates forward/backward
+    - Update preferences (e.g., "More kid-friendly")
+
+    The original run is preserved, and a new run is created with the modified intent.
+
+    Args:
+        run_id: Original run ID to base edits on
+        edit_request: What-if edit parameters
+        current_user: Authenticated user context
+        session: Database session
+
+    Returns:
+        StartPlanResponse with new run_id
+    """
+    # Load original run and verify org scoping
+    stmt = select(AgentRun).where(AgentRun.run_id == run_id)
+    original_run = session.execute(stmt).scalar_one_or_none()
+
+    if not original_run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Original run not found",
+        )
+
+    if original_run.org_id != current_user.org_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied to this run",
+        )
+
+    # Clone and modify the intent
+    original_intent = original_run.intent
+    if not isinstance(original_intent, dict):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Original run has invalid intent format",
+        )
+
+    # Deep copy the intent
+    import copy
+    modified_intent = copy.deepcopy(original_intent)
+
+    # Apply delta budget
+    if edit_request.delta_budget_usd_cents is not None:
+        current_budget = modified_intent.get("budget_usd_cents", 0)
+        modified_intent["budget_usd_cents"] = max(
+            10000,  # Minimum $100 budget
+            current_budget + edit_request.delta_budget_usd_cents,
+        )
+
+    # Apply date shift
+    if edit_request.shift_dates_days is not None:
+        from datetime import date, timedelta
+
+        date_window = modified_intent.get("date_window", {})
+        if "start" in date_window:
+            start_date = date.fromisoformat(date_window["start"])
+            start_date += timedelta(days=edit_request.shift_dates_days)
+            date_window["start"] = start_date.isoformat()
+
+        if "end" in date_window:
+            end_date = date.fromisoformat(date_window["end"])
+            end_date += timedelta(days=edit_request.shift_dates_days)
+            date_window["end"] = end_date.isoformat()
+
+        modified_intent["date_window"] = date_window
+
+    # Apply preference updates
+    if edit_request.new_prefs is not None:
+        current_prefs = modified_intent.get("prefs", {})
+        current_prefs.update(edit_request.new_prefs)
+        modified_intent["prefs"] = current_prefs
+
+    # Validate the modified intent
+    try:
+        validated_intent = IntentV1.model_validate(modified_intent)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Modified intent is invalid: {str(e)}",
+        ) from e
+
+    # Start a new run with the modified intent
+    new_run_id = start_run(
+        session=session,
+        org_id=current_user.org_id,
+        user_id=current_user.user_id,
+        intent=validated_intent,
+    )
+
+    return StartPlanResponse(run_id=new_run_id)
