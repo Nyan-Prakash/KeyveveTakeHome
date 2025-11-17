@@ -8,7 +8,7 @@ from datetime import UTC, datetime, time, timedelta
 from openai import OpenAI
 
 from backend.app.config import get_settings
-from backend.app.models.common import ChoiceKind, Geo, Provenance, TimeWindow
+from backend.app.models.common import ChoiceKind, Geo, Provenance, TimeWindow, TransitMode
 from backend.app.models.itinerary import (
     Activity,
     Citation,
@@ -132,6 +132,185 @@ IMPORTANT: Only extract entries that are clearly identifiable attractions with p
     except Exception as e:
         # Fallback to empty dict if LLM extraction fails
         print(f"Warning: LLM extraction failed: {e}. Using empty venue map.")
+        return {}
+
+
+def _extract_flight_info_from_rag(chunks: list[str]) -> dict[int, dict[str, any]]:
+    """Extract flight information from RAG chunks using LLM.
+
+    Parses markdown-formatted RAG chunks to identify airline names, routes,
+    pricing, and flight details.
+
+    Args:
+        chunks: List of knowledge chunk texts (markdown formatted)
+
+    Returns:
+        Dict mapping index to flight info dict with keys: airline, route, price_usd_cents, duration_hours
+    """
+    if not chunks:
+        return {}
+
+    # Combine chunks for LLM analysis (limit to prevent token overflow)
+    combined_text = "\n\n".join(chunks[:20])  # Limit to first 20 chunks
+
+    # Create prompt for LLM extraction
+    prompt = f"""Extract flight and airline information from this travel guide text. Look for airlines, flight routes, pricing, and travel times.
+
+For each flight/airline mentioned, extract:
+- airline: The airline name (e.g., "LATAM", "American Airlines", "TAP Air Portugal")
+- route: Flight route if specified (e.g., "JFK-GIG", "LAX-MAD")
+- origin_airport: Origin airport code (e.g., "JFK", "LAX") if mentioned
+- dest_airport: Destination airport code (e.g., "GIG", "MAD") if mentioned
+- price_usd: Flight price in USD if mentioned (extract numbers like "$450", "$1,200"). If a range like "$400-600", use the lower value.
+- duration_hours: Flight duration in hours if mentioned (extract from text like "8 hours", "10h 30m")
+
+Text:
+{combined_text}
+
+Return a JSON array of flight information. Example format:
+[
+  {{"airline": "LATAM", "route": "JFK-GIG", "origin_airport": "JFK", "dest_airport": "GIG", "price_usd": 650.0, "duration_hours": 9.5}},
+  {{"airline": "American Airlines", "route": "LAX-MAD", "origin_airport": "LAX", "dest_airport": "MAD", "price_usd": null, "duration_hours": 11.0}}
+]
+
+IMPORTANT: Only extract entries that are clearly identifiable airlines or flight information, not general travel descriptions."""
+
+    try:
+        settings = get_settings()
+        client = OpenAI(api_key=settings.openai_api_key)
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",  # Use faster, cheaper model for extraction
+            messages=[
+                {"role": "system", "content": "You are a precise data extractor. Return only valid JSON arrays."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.0,  # Deterministic extraction
+            max_tokens=2000
+        )
+
+        content = response.choices[0].message.content
+        # Extract JSON from markdown code blocks if present
+        if "```json" in content:
+            content = content.split("```json")[1].split("```")[0].strip()
+        elif "```" in content:
+            content = content.split("```")[1].split("```")[0].strip()
+
+        flight_options = json.loads(content)
+
+        # Convert to the expected format
+        flight_info_map = {}
+        for idx, flight in enumerate(flight_options):
+            # Convert price to cents
+            price_usd_cents = None
+            if flight.get("price_usd") is not None:
+                price_usd_cents = int(flight["price_usd"] * 100)
+
+            flight_info_map[idx] = {
+                "airline": flight.get("airline"),
+                "route": flight.get("route"),
+                "origin_airport": flight.get("origin_airport"),
+                "dest_airport": flight.get("dest_airport"),
+                "price_usd_cents": price_usd_cents,
+                "duration_hours": flight.get("duration_hours"),
+            }
+
+        return flight_info_map
+
+    except Exception as e:
+        # Fallback to empty dict if LLM extraction fails
+        print(f"Warning: Flight extraction failed: {e}. Using empty flight map.")
+        return {}
+
+
+def _extract_transit_info_from_rag(chunks: list[str]) -> dict[int, dict[str, any]]:
+    """Extract transit information from RAG chunks using LLM.
+
+    Parses markdown-formatted RAG chunks to identify transit modes, routes,
+    neighborhoods served, and pricing.
+
+    Args:
+        chunks: List of knowledge chunk texts (markdown formatted)
+
+    Returns:
+        Dict mapping index to transit info dict with keys: mode, route_name, neighborhoods, price_usd_cents, duration_minutes
+    """
+    if not chunks:
+        return {}
+
+    # Combine chunks for LLM analysis (limit to prevent token overflow)
+    combined_text = "\n\n".join(chunks[:20])  # Limit to first 20 chunks
+
+    # Create prompt for LLM extraction
+    prompt = f"""Extract public transportation information from this travel guide text. Look for metro lines, bus routes, taxi services, and transit details.
+
+For each transit option mentioned, extract:
+- mode: Transportation mode (metro, bus, taxi, walk, or train)
+- route_name: Specific route name or line (e.g., "Line 1", "Metro Red Line", "Bus 150")
+- neighborhoods: List of neighborhoods or areas served by this route
+- price_usd: Transit cost in USD if mentioned (extract from text like "$2.50", "€1.50"). For monthly passes, divide by 30.
+- duration_minutes: Typical journey time in minutes if mentioned
+
+Text:
+{combined_text}
+
+Return a JSON array of transit options. Example format:
+[
+  {{"mode": "metro", "route_name": "Line 1", "neighborhoods": ["Downtown", "Copacabana"], "price_usd": 1.25, "duration_minutes": 15}},
+  {{"mode": "bus", "route_name": "Bus 474", "neighborhoods": ["Ipanema", "Centro"], "price_usd": 1.00, "duration_minutes": 25}}
+]
+
+IMPORTANT: Only extract entries that are clearly identifiable transit routes or services, not general descriptions."""
+
+    try:
+        settings = get_settings()
+        client = OpenAI(api_key=settings.openai_api_key)
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",  # Use faster, cheaper model for extraction
+            messages=[
+                {"role": "system", "content": "You are a precise data extractor. Return only valid JSON arrays."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.0,  # Deterministic extraction
+            max_tokens=2000
+        )
+
+        content = response.choices[0].message.content
+        # Extract JSON from markdown code blocks if present
+        if "```json" in content:
+            content = content.split("```json")[1].split("```")[0].strip()
+        elif "```" in content:
+            content = content.split("```")[1].split("```")[0].strip()
+
+        transit_options = json.loads(content)
+
+        # Convert to the expected format
+        transit_info_map = {}
+        for idx, transit in enumerate(transit_options):
+            # Convert price to cents
+            price_usd_cents = None
+            if transit.get("price_usd") is not None:
+                price_usd_cents = int(transit["price_usd"] * 100)
+
+            # Convert duration to seconds
+            duration_seconds = None
+            if transit.get("duration_minutes") is not None:
+                duration_seconds = int(transit["duration_minutes"] * 60)
+
+            transit_info_map[idx] = {
+                "mode": transit.get("mode"),
+                "route_name": transit.get("route_name"),
+                "neighborhoods": transit.get("neighborhoods", []),
+                "price_usd_cents": price_usd_cents,
+                "duration_seconds": duration_seconds,
+            }
+
+        return transit_info_map
+
+    except Exception as e:
+        # Fallback to empty dict if LLM extraction fails
+        print(f"Warning: Transit extraction failed: {e}. Using empty transit map.")
         return {}
 
 
@@ -481,8 +660,47 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
         budget_usd_cents=state.intent.budget_usd_cents,
     )
 
-    # Populate state.flights dictionary with real data
-    for flight in flight_options:
+    # Populate state.flights dictionary with real data and enrich with RAG
+    flight_keywords = _extract_flight_info_from_rag(state.rag_chunks)
+    
+    for idx, flight in enumerate(flight_options):
+        # Try to match RAG flight data by airport codes
+        matching_rag = None
+        if flight_keywords:
+            try:
+                for rag_idx, rag_info in flight_keywords.items():
+                    # Match by airport codes (origin/destination)
+                    rag_origin = rag_info.get("origin_airport", "").upper()
+                    rag_dest = rag_info.get("dest_airport", "").upper()
+                    
+                    if (rag_origin == flight.origin.upper() and rag_dest == flight.dest.upper()) or \
+                       (rag_dest == flight.origin.upper() and rag_origin == flight.dest.upper()):
+                        # Check if this RAG flight hasn't been used yet
+                        if not any(f.flight_id.startswith(rag_info.get("airline", "")) for f in state.flights.values()):
+                            matching_rag = rag_info
+                            break
+            except (AttributeError, TypeError) as e:
+                print(f"Warning: Error matching flight for {flight.flight_id}: {e}")
+                pass
+        
+        # If we have RAG data, use it to enrich the flight
+        if matching_rag:
+            # Update flight ID to include airline name from RAG
+            if matching_rag.get("airline"):
+                flight.flight_id = f"{matching_rag['airline']} {flight.flight_id.split()[-1]}"
+            
+            # Use RAG-derived price if available
+            if matching_rag.get("price_usd_cents"):
+                flight.price_usd_cents = matching_rag["price_usd_cents"]
+            
+            # Use RAG-derived duration if available
+            if matching_rag.get("duration_hours"):
+                flight.duration_seconds = int(matching_rag["duration_hours"] * 3600)
+            
+            # Update provenance to indicate RAG enrichment
+            flight.provenance.source = "fixture+rag"
+            flight.provenance.ref_id = f"enriched:{flight.provenance.ref_id}"
+
         state.flights[flight.flight_id] = flight
     state.tool_call_counts["flights"] = len(flight_options)
 
@@ -602,9 +820,79 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
 
     state.tool_call_counts["attractions"] = attraction_count
 
-    # Simulate transit tool calls (between activities)
-    total_activities = sum(len(day.slots) for day in state.plan.days)
-    state.tool_call_counts["transit"] = max(0, total_activities - 1)
+    # Populate transit legs and enrich with RAG data
+    transit_keywords = _extract_transit_info_from_rag(state.rag_chunks)
+    transit_count = 0
+
+    for day_plan in state.plan.days:
+        for slot in day_plan.slots:
+            for choice in slot.choices:
+                if (
+                    choice.kind == ChoiceKind.transit
+                    and choice.option_ref not in state.transit_legs
+                ):
+                    # Create transit leg using the adapter
+                    from backend.app.adapters.transit import get_transit_leg
+                    
+                    # Extract location data from the choice
+                    # For fixture data, create fake geo coordinates
+                    from_geo = Geo(lat=48.8566, lon=2.3522)  # Default Paris center
+                    to_geo = Geo(lat=48.8566 + 0.01, lon=2.3522 + 0.01)  # Slightly offset
+                    
+                    # Extract transit mode from choice.option_ref
+                    mode_str = choice.option_ref.split("_")[-1] if "_" in choice.option_ref else "metro"
+                    try:
+                        mode = TransitMode(mode_str)
+                    except ValueError:
+                        mode = TransitMode.metro  # Default fallback
+
+                    transit_leg = get_transit_leg(
+                        from_geo=from_geo,
+                        to_geo=to_geo,
+                        mode_prefs=[mode]
+                    )
+
+                    # Try to match RAG transit data by mode and neighborhoods
+                    matching_rag = None
+                    if transit_keywords:
+                        try:
+                            for rag_idx, rag_info in transit_keywords.items():
+                                rag_mode = rag_info.get("mode", "").lower()
+                                transit_mode_str = mode.value.lower()
+                                
+                                # Match by mode
+                                if rag_mode == transit_mode_str:
+                                    # Check if this RAG transit hasn't been used yet
+                                    if not any(
+                                        leg.provenance.ref_id.endswith(str(rag_idx)) 
+                                        for leg in state.transit_legs.values()
+                                    ):
+                                        matching_rag = rag_info
+                                        break
+                        except (AttributeError, TypeError) as e:
+                            print(f"Warning: Error matching transit for {choice.option_ref}: {e}")
+                            pass
+
+                    # If we have RAG data, use it to enrich the transit leg
+                    if matching_rag:
+                        # Use RAG-derived price if available
+                        if matching_rag.get("price_usd_cents") and matching_rag["price_usd_cents"] > 0:
+                            # We can't directly modify the cost in TransitLeg, but we can update the provenance
+                            # to indicate RAG enrichment
+                            pass
+                        
+                        # Use RAG-derived duration if available
+                        if matching_rag.get("duration_seconds"):
+                            transit_leg.duration_seconds = matching_rag["duration_seconds"]
+                        
+                        # Update provenance to indicate RAG enrichment
+                        transit_leg.provenance.source = "fixture+rag"
+                        transit_leg.provenance.ref_id = f"enriched:{transit_leg.provenance.ref_id}:{rag_idx}"
+
+                    state.transit_legs[choice.option_ref] = transit_leg
+                    transit_count += 1
+
+    state.tool_call_counts["transit"] = transit_count
 
     state.messages.append(f"Executed {sum(state.tool_call_counts.values())} tool calls")
     state.last_event_ts = datetime.now(UTC)
