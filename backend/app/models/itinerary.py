@@ -19,6 +19,7 @@ class Activity(BaseModel):
     geo: Geo | None = Field(default=None, description="Activity location")
     notes: str = Field(description="Additional notes or details")
     locked: bool = Field(description="Whether this activity was user-locked")
+    cost_usd_cents: int | None = Field(default=None, description="Activity cost in USD cents")
 
 
 class DayItinerary(BaseModel):

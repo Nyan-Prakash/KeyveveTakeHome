@@ -182,10 +182,21 @@ def _execute_graph(
 
             # Save tool metrics and node timings
             # Note: Always set tool_log even if empty to ensure consistency
-            agent_run.tool_log = {
+            tool_log_data = {
                 "node_timings": current_state.node_timings,
                 "tool_call_counts": current_state.tool_call_counts,
             }
+            
+            # Include weather data if available for frontend display
+            if current_state.weather_by_date:
+                weather_data = {}
+                for date_key, weather_day in current_state.weather_by_date.items():
+                    # Convert date to string key and weather object to dict
+                    date_str = date_key.isoformat() if hasattr(date_key, 'isoformat') else str(date_key)
+                    weather_data[date_str] = weather_day.model_dump(mode="json") if hasattr(weather_day, 'model_dump') else weather_day
+                tool_log_data["weather_by_date"] = weather_data
+            
+            agent_run.tool_log = tool_log_data
 
         # Save the itinerary to the database
         if current_state.itinerary:

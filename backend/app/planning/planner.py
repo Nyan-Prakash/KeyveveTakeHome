@@ -2,7 +2,7 @@
 
 import random
 from collections.abc import Sequence
-from datetime import datetime, time, timedelta
+from datetime import UTC, datetime, time, timedelta
 
 from backend.app.models.common import ChoiceKind, Provenance, TimeWindow
 from backend.app.models.intent import IntentV1, LockedSlot
@@ -78,13 +78,78 @@ def _generate_seed_from_intent(intent: IntentV1) -> int:
     return hash(content) % (2**31)
 
 
+def _calculate_budget_multiplier(intent: IntentV1, trip_days: int, base_multiplier: float) -> float:
+    """Calculate budget-aware cost multiplier.
+
+    Scales the base variant multiplier based on budget pressure, ensuring
+    that when budget is reduced, the planner generates genuinely cheaper plans.
+
+    Args:
+        intent: User intent with budget information
+        trip_days: Number of days in the trip
+        base_multiplier: Base cost multiplier for this variant (e.g., 0.7 for cost_conscious)
+
+    Returns:
+        Budget-adjusted cost multiplier
+    """
+    # Estimate baseline costs for a mid-tier trip (per day)
+    baseline_lodging_per_night = 15000  # $150/night
+    baseline_attraction_per_day = 8000  # $80 in attractions per day (2 attractions @ $40 each)
+    baseline_daily_spend = 8000  # $80 for meals and miscellaneous
+
+    # Calculate per-day baseline (excluding flight which is one-time cost)
+    baseline_per_day = (
+        baseline_lodging_per_night +
+        baseline_attraction_per_day +
+        baseline_daily_spend
+    )  # Total: $310/day
+
+    # Calculate per-day budget
+    budget_per_day = intent.budget_usd_cents / max(trip_days, 1)
+
+    # Calculate budget ratio (how much per-day budget vs per-day baseline)
+    budget_ratio = budget_per_day / max(baseline_per_day, 1)
+
+    # Adjust multiplier based on budget pressure
+    # Lower budget_ratio → tighter budget → need lower multiplier
+    if budget_ratio < 0.8:
+        # Very tight budget (< 80% of baseline) - aggressive cost reduction
+        adjustment = 0.6
+    elif budget_ratio < 1.0:
+        # Below baseline (80-100%) - moderate reduction
+        adjustment = 0.8
+    elif budget_ratio < 1.5:
+        # Comfortable budget (100-150%) - normal costs
+        adjustment = 1.0
+    elif budget_ratio < 2.0:
+        # Good budget (150-200%) - can afford slightly more
+        adjustment = 1.1
+    elif budget_ratio < 3.0:
+        # Generous budget (200-300%) - can splurge more
+        adjustment = 1.25
+    elif budget_ratio < 4.0:
+        # Very generous budget (300-400%) - premium options
+        adjustment = 1.35
+    else:
+        # Luxury budget (400%+) - max multiplier for best options
+        adjustment = 1.45
+
+    # Apply adjustment to base multiplier
+    result = base_multiplier * adjustment
+
+    # Clamp between reasonable bounds (0.5x to 1.5x)
+    return max(0.5, min(result, 1.5))
+
+
 def _build_cost_conscious_plan(intent: IntentV1, trip_days: int, rng: random.Random) -> PlanV1:
     """Build a cost-conscious plan emphasizing budget-friendly options."""
+    base_multiplier = 0.7
+    adjusted_multiplier = _calculate_budget_multiplier(intent, trip_days, base_multiplier)
     return _build_plan_variant(
         intent=intent,
         trip_days=trip_days,
         rng=rng,
-        cost_multiplier=0.7,  # Lower costs
+        cost_multiplier=adjusted_multiplier,
         activity_density=0.8,  # Slightly fewer activities
         variant_name="cost_conscious"
     )
@@ -92,11 +157,13 @@ def _build_cost_conscious_plan(intent: IntentV1, trip_days: int, rng: random.Ran
 
 def _build_convenience_plan(intent: IntentV1, trip_days: int, rng: random.Random) -> PlanV1:
     """Build a convenience-focused plan emphasizing shorter travel times."""
+    base_multiplier = 1.0
+    adjusted_multiplier = _calculate_budget_multiplier(intent, trip_days, base_multiplier)
     return _build_plan_variant(
         intent=intent,
         trip_days=trip_days,
         rng=rng,
-        cost_multiplier=1.0,  # Normal costs
+        cost_multiplier=adjusted_multiplier,
         activity_density=1.0,  # Normal activity count
         variant_name="convenience"
     )
@@ -104,11 +171,13 @@ def _build_convenience_plan(intent: IntentV1, trip_days: int, rng: random.Random
 
 def _build_experience_plan(intent: IntentV1, trip_days: int, rng: random.Random) -> PlanV1:
     """Build an experience-focused plan with premium activities."""
+    base_multiplier = 1.3
+    adjusted_multiplier = _calculate_budget_multiplier(intent, trip_days, base_multiplier)
     return _build_plan_variant(
         intent=intent,
         trip_days=trip_days,
         rng=rng,
-        cost_multiplier=1.3,  # Higher costs for premium
+        cost_multiplier=adjusted_multiplier,
         activity_density=1.1,  # More activities
         variant_name="experience"
     )
@@ -116,11 +185,13 @@ def _build_experience_plan(intent: IntentV1, trip_days: int, rng: random.Random)
 
 def _build_relaxed_plan(intent: IntentV1, trip_days: int, rng: random.Random) -> PlanV1:
     """Build a relaxed plan with more free time."""
+    base_multiplier = 0.9
+    adjusted_multiplier = _calculate_budget_multiplier(intent, trip_days, base_multiplier)
     return _build_plan_variant(
         intent=intent,
         trip_days=trip_days,
         rng=rng,
-        cost_multiplier=0.9,  # Slightly lower costs
+        cost_multiplier=adjusted_multiplier,
         activity_density=0.6,  # Fewer activities, more free time
         variant_name="relaxed"
     )
@@ -163,7 +234,7 @@ def _build_plan_variant(
                         indoor=None,  # Unknown for locked slots
                         themes=intent.prefs.themes,
                     ),
-                    provenance=Provenance(source="user", fetched_at=datetime.now()),
+                    provenance=Provenance(source="user", fetched_at=datetime.now(UTC)),
                 )
                 slots.append(Slot(
                     window=locked_slot.window,
@@ -215,6 +286,55 @@ def _build_plan_variant(
         slots.sort(key=lambda s: s.window.start)
 
         days.append(DayPlan(date=current_date, slots=slots))
+
+    # Add lodging choice for entire trip (appears on each day for UI display)
+    # Determine tier based on budget
+    budget_per_day = intent.budget_usd_cents / max(trip_days, 1)
+    
+    if budget_per_day < 15000:  # Less than $150/day
+        lodging_tier = "budget"
+        lodging_cost = int(7500 * cost_multiplier)  # ~$75/night
+    elif budget_per_day < 30000:  # Less than $300/day
+        lodging_tier = "mid"
+        lodging_cost = int(15000 * cost_multiplier)  # ~$150/night
+    else:
+        lodging_tier = "luxury"
+        lodging_cost = int(35000 * cost_multiplier)  # ~$350/night
+
+    # Debug logging for lodging tier selection
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(
+        f"Lodging selection: budget=${intent.budget_usd_cents/100:.0f}, days={trip_days}, "
+        f"per_day=${budget_per_day/100:.0f}, tier={lodging_tier}, "
+        f"cost_multiplier={cost_multiplier:.2f}, final_cost=${lodging_cost/100:.0f}/night"
+    )
+
+    # Create lodging choice with unique reference per variant (same across all days)
+    lodging_choice = Choice(
+        kind=ChoiceKind.lodging,
+        option_ref=f"{variant_name}_lodging_{lodging_tier}",
+        features=ChoiceFeatures(
+            cost_usd_cents=lodging_cost,  # Per night cost
+            travel_seconds=0,
+            indoor=True,
+            themes=["accommodation"],
+        ),
+        provenance=Provenance(source="planner", fetched_at=datetime.now(UTC)),
+    )
+
+    # Add lodging slot to each day for UI display (but cost calculated only once in synthesizer)
+    for day_plan in days:
+        # Use late evening slot that won't conflict with activities
+        lodging_slot = Slot(
+            window=TimeWindow(start=time(22, 0), end=time(23, 59)),  # Check-in after evening activities
+            choices=[lodging_choice],
+            locked=False,
+        )
+        day_plan.slots.append(lodging_slot)
+        
+        # Re-sort day slots to maintain chronological order
+        day_plan.slots.sort(key=lambda s: s.window.start)
 
     # Create assumptions based on variant
     fx_rate = 0.92 if variant_name != "experience" else 0.90  # Slightly different rates

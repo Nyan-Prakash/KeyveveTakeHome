@@ -324,9 +324,14 @@ def get_plan(
             response["node_timings"] = agent_run.tool_log["node_timings"]
         else:
             response["node_timings"] = {}
+            
+        # Weather data for frontend display
+        if "weather_by_date" in agent_run.tool_log:
+            response["weather_by_date"] = agent_run.tool_log["weather_by_date"]
     else:
         response["tool_call_counts"] = {}
         response["node_timings"] = {}
+        response["weather_by_date"] = {}
 
     # Add cost if available
     if agent_run.cost_usd is not None:

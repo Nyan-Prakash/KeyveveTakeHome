@@ -213,17 +213,56 @@ async def parse_edit_request(
             assistant_message=confirmation,
         )
     else:
-        # No function call - ask for clarification
-        assistant_message = (
-            message.content
-            or "I'm not sure what changes you'd like to make. Could you be more specific? "
-            "For example: 'Make it $300 cheaper' or 'Shift dates forward 2 days'."
-        )
+        # No function call - check for vague budget requests
+        user_message_lower = user_message.lower()
 
-        return ParsedEdit(
-            delta_budget_usd_cents=None,
-            shift_dates_days=None,
-            new_prefs=None,
-            description="Clarification needed",
-            assistant_message=assistant_message,
-        )
+        # Handle vague "cheaper" requests
+        if any(word in user_message_lower for word in ["cheaper", "reduce budget", "less expensive", "save money", "lower cost"]):
+            # Suggest 10% reduction as default
+            suggested_reduction = int(current_intent.budget_usd_cents * 0.10)
+
+            return ParsedEdit(
+                delta_budget_usd_cents=-suggested_reduction,
+                shift_dates_days=None,
+                new_prefs=None,
+                description="Budget reduction (vague request)",
+                assistant_message=(
+                    f"I understand you'd like a cheaper trip. I'll reduce the budget by "
+                    f"${suggested_reduction / 100:,.2f} (10% reduction). "
+                    f"Regenerating your itinerary with this new budget..."
+                ),
+            )
+
+        # Handle vague "more expensive" requests
+        elif any(word in user_message_lower for word in ["more expensive", "increase budget", "splurge", "upgrade", "premium"]):
+            suggested_increase = int(current_intent.budget_usd_cents * 0.10)
+
+            return ParsedEdit(
+                delta_budget_usd_cents=suggested_increase,
+                shift_dates_days=None,
+                new_prefs=None,
+                description="Budget increase (vague request)",
+                assistant_message=(
+                    f"I'll increase your budget by ${suggested_increase / 100:,.2f} (10% increase) "
+                    f"to give you more premium options. Regenerating your itinerary..."
+                ),
+            )
+
+        # Original fallback for other unclear requests
+        else:
+            assistant_message = (
+                message.content
+                or "I'm not sure what changes you'd like to make. You can say things like:\n"
+                "- 'Make it $300 cheaper' (specific amount)\n"
+                "- 'Make it cheaper' (I'll suggest a 10% reduction)\n"
+                "- 'Shift dates forward 2 days'\n"
+                "- 'Make it more kid-friendly'"
+            )
+
+            return ParsedEdit(
+                delta_budget_usd_cents=None,
+                shift_dates_days=None,
+                new_prefs=None,
+                description="Clarification needed",
+                assistant_message=assistant_message,
+            )

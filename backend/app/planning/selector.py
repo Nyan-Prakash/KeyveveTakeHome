@@ -3,6 +3,7 @@
 import logging
 from collections.abc import Mapping, Sequence
 
+from backend.app.models.intent import IntentV1
 from backend.app.models.plan import ChoiceFeatures
 
 from .types import BranchFeatures, FeatureStats, ScoredPlan
@@ -28,27 +29,64 @@ SCORE_WEIGHTS = {
 }
 
 
+def _calculate_cost_weight(intent: IntentV1) -> float:
+    """Calculate dynamic cost weight based on budget generosity."""
+    baseline_per_day = 23000  # $230/day baseline
+    # Get trip duration from intent's date_window
+    trip_days = max((intent.date_window.end - intent.date_window.start).days, 1)
+    budget_per_day = intent.budget_usd_cents / trip_days
+    budget_ratio = budget_per_day / baseline_per_day
+
+    # Adjust cost weight based on budget health
+    if budget_ratio < 1.0:
+        # Tight budget - strongly prefer cheaper
+        cost_weight = -1.5
+    elif budget_ratio < 1.5:
+        # Normal budget - moderately prefer cheaper
+        cost_weight = -1.0
+    elif budget_ratio < 3.0:
+        # Good budget - neutral on cost
+        cost_weight = -0.3
+    else:
+        # Generous budget - actually prefer more expensive (better quality)
+        cost_weight = 0.5
+
+    # Log budget calculation for debugging
+    logger.info(
+        f"Budget calculation: budget=${intent.budget_usd_cents/100:.0f}, days={trip_days}, "
+        f"per_day=${budget_per_day/100:.0f}, ratio={budget_ratio:.2f}, cost_weight={cost_weight}"
+    )
+    
+    return cost_weight
+
+
 def score_branches(
     branches: Sequence[BranchFeatures],
+    intent: IntentV1,
     stats: Mapping[str, FeatureStats] = FROZEN_STATS,
 ) -> list[ScoredPlan]:
     """
-    Score and rank plan branches using frozen feature statistics.
+    Score and rank plan branches using frozen feature statistics with budget-aware cost weighting.
 
     This function:
     1. Extracts aggregate features from each branch
     2. Normalizes features using z-scores with frozen stats
-    3. Computes weighted scores
-    4. Returns ranked list of scored plans
-    5. Logs score vectors for chosen + top 2 discarded plans
+    3. Computes budget-aware cost weight based on intent
+    4. Computes weighted scores
+    5. Returns ranked list of scored plans
+    6. Logs score vectors for chosen + top 2 discarded plans
 
     Args:
         branches: List of plan branches with extracted features
+        intent: User intent with budget information for dynamic cost weighting
         stats: Feature statistics for normalization (frozen values)
 
     Returns:
         List of ScoredPlan objects sorted by descending score
     """
+    # Calculate budget-aware cost weight
+    cost_weight = _calculate_cost_weight(intent)
+
     scored_plans: list[ScoredPlan] = []
 
     for branch in branches:
@@ -58,13 +96,13 @@ def score_branches(
         # Normalize features using z-scores
         normalized_vector = _normalize_features(feature_vector, stats)
 
-        # Compute weighted score
-        score = _compute_weighted_score(normalized_vector)
+        # Compute weighted score with dynamic cost weight
+        score = _compute_weighted_score(normalized_vector, cost_weight)
 
         scored_plans.append(ScoredPlan(
             plan=branch.plan,
             score=score,
-            feature_vector={**feature_vector, **normalized_vector, "final_score": score},
+            feature_vector={**feature_vector, **normalized_vector, "final_score": score, "cost_weight": cost_weight},
         ))
 
     # Sort by descending score (best first)
@@ -162,12 +200,13 @@ def _normalize_features(
     return normalized
 
 
-def _compute_weighted_score(normalized_vector: dict[str, float]) -> float:
+def _compute_weighted_score(normalized_vector: dict[str, float], cost_weight: float) -> float:
     """
     Compute final weighted score from normalized features.
 
     Args:
         normalized_vector: Dictionary with normalized feature values
+        cost_weight: Dynamic cost weight based on budget
 
     Returns:
         Final scalar score for the plan
@@ -177,7 +216,11 @@ def _compute_weighted_score(normalized_vector: dict[str, float]) -> float:
     for feature_name, weight in SCORE_WEIGHTS.items():
         norm_key = f"norm_{feature_name}"
         if norm_key in normalized_vector:
-            score += weight * normalized_vector[norm_key]
+            if feature_name == "cost":
+                # Use dynamic cost weight for cost feature
+                score += cost_weight * normalized_vector[norm_key]
+            else:
+                score += weight * normalized_vector[norm_key]
 
     return score
 

@@ -302,7 +302,14 @@ def main():
                     for day in itin.get("days", []):
                         with st.expander(f"Day {day.get('day_date')}", expanded=False):
                             for act in day.get("activities", []):
-                                st.markdown(f"**{act['name']}** ({act['kind']})")
+                                # Display name with cost if available
+                                name_display = f"**{act['name']}**"
+                                if act.get("cost_usd_cents") is not None:
+                                    cost_dollars = act["cost_usd_cents"] / 100
+                                    name_display += f" - ${cost_dollars:,.2f}"
+                                name_display += f" ({act['kind']})"
+                                st.markdown(name_display)
+
                                 st.caption(
                                     f"{act['window']['start']} - {act['window']['end']}"
                                 )

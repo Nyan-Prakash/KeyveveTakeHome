@@ -1,9 +1,13 @@
 """LangGraph nodes implementing PR6 planner and selector logic."""
 
+import json
 import random
 import re
 from datetime import UTC, datetime, time, timedelta
 
+from openai import OpenAI
+
+from backend.app.config import get_settings
 from backend.app.models.common import ChoiceKind, Geo, Provenance, TimeWindow
 from backend.app.models.itinerary import (
     Activity,
@@ -28,72 +32,206 @@ from .state import OrchestratorState
 
 
 def _extract_venue_info_from_rag(chunks: list[str]) -> dict[int, dict[str, any]]:
-    """Extract venue information from RAG chunks.
+    """Extract venue information from RAG chunks using LLM.
 
-    Parses chunks to identify venue types, names, and characteristics.
+    Parses markdown-formatted RAG chunks to identify attraction names, types,
+    costs, and characteristics.
 
     Args:
-        chunks: List of knowledge chunk texts
+        chunks: List of knowledge chunk texts (markdown formatted)
 
     Returns:
-        Dict mapping index to venue info dict with keys: name, type, indoor
+        Dict mapping index to venue info dict with keys: name, type, indoor, cost_usd_cents
     """
-    venue_info_map = {}
+    if not chunks:
+        return {}
 
-    # Keywords for venue type detection
-    venue_keywords = {
-        "temple": ["temple", "shrine", "sacred", "worship"],
-        "garden": ["garden", "park", "botanical"],
-        "museum": ["museum", "gallery", "exhibition"],
-        "restaurant": ["restaurant", "cafe", "dining", "food"],
-        "market": ["market", "shopping", "bazaar"],
-        "theater": ["theater", "theatre", "performance"],
-        "castle": ["castle", "palace", "fortress"],
-        "beach": ["beach", "shore", "coast"],
-        "mountain": ["mountain", "peak", "hiking"],
-    }
+    # Combine chunks for LLM analysis (limit to prevent token overflow)
+    combined_text = "\n\n".join(chunks[:20])  # Limit to first 20 chunks
 
-    # Indoor likelihood for each type
-    indoor_by_type = {
-        "temple": None,  # Can be indoor or outdoor
-        "garden": False,
-        "museum": True,
-        "restaurant": True,
-        "market": None,
-        "theater": True,
-        "castle": None,
-        "beach": False,
-        "mountain": False,
-    }
+    # Create prompt for LLM extraction
+    prompt = f"""Extract attraction information from this travel guide text. Look for attractions, museums, parks, landmarks, etc.
 
-    idx = 0
-    for chunk in chunks:
-        chunk_lower = chunk.lower()
+For each attraction, extract:
+- name: The full name of the attraction
+- type: Category (museum, park, garden, palace, temple, restaurant, market, theater, beach, mountain, or attraction)
+- indoor: Whether it's primarily indoor (true), outdoor (false), or unknown (null)
+- cost_usd: Entry cost in USD (extract from text like "Adults $15" or "Adults €13"). If a range like "$13-18", use the lower value. Return null if not mentioned or free.
 
-        # Extract venue names (look for capitalized words or phrases)
-        # Simple heuristic: find words after "visit", "see", "explore"
-        name_pattern = r"(?:visit|see|explore|famous for|known for)\s+(?:the\s+)?([A-Z][a-zA-Z\s]{3,30})"
-        name_matches = re.findall(name_pattern, chunk)
+Text:
+{combined_text}
 
-        # Detect venue type
-        detected_type = "attraction"  # Default
-        for vtype, keywords in venue_keywords.items():
-            if any(keyword in chunk_lower for keyword in keywords):
-                detected_type = vtype
-                break
+Return a JSON array of attractions. Example format:
+[
+  {{"name": "Prado Museum", "type": "museum", "indoor": true, "cost_usd": 15.0}},
+  {{"name": "Retiro Park", "type": "park", "indoor": false, "cost_usd": null}}
+]
 
-        # Extract venue name if found
-        venue_name = name_matches[0].strip() if name_matches else None
+IMPORTANT: Only extract entries that are clearly identifiable attractions with proper names, not general categories or descriptions."""
 
-        if venue_name or detected_type != "attraction":
+    try:
+        settings = get_settings()
+        client = OpenAI(api_key=settings.openai_api_key)
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",  # Use faster, cheaper model for extraction
+            messages=[
+                {"role": "system", "content": "You are a precise data extractor. Return only valid JSON arrays."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.0,  # Deterministic extraction
+            max_tokens=2000
+        )
+
+        content = response.choices[0].message.content
+        # Extract JSON from markdown code blocks if present
+        if "```json" in content:
+            content = content.split("```json")[1].split("```")[0].strip()
+        elif "```" in content:
+            content = content.split("```")[1].split("```")[0].strip()
+
+        attractions = json.loads(content)
+
+        # Convert to the expected format
+        venue_info_map = {}
+        indoor_by_type = {
+            "temple": None,
+            "garden": False,
+            "museum": True,
+            "restaurant": True,
+            "market": None,
+            "theater": True,
+            "castle": None,
+            "palace": None,
+            "beach": False,
+            "mountain": False,
+            "park": False,
+        }
+
+        for idx, attr in enumerate(attractions):
+            venue_type = attr.get("type", "attraction")
+            indoor = attr.get("indoor")
+            if indoor is None:
+                indoor = indoor_by_type.get(venue_type)
+
+            # Convert cost to cents
+            cost_usd_cents = None
+            if attr.get("cost_usd") is not None:
+                cost_usd_cents = int(attr["cost_usd"] * 100)
+
             venue_info_map[idx] = {
-                "name": venue_name,
-                "type": detected_type,
-                "indoor": indoor_by_type.get(detected_type),
+                "name": attr.get("name"),
+                "type": venue_type,
+                "indoor": indoor,
+                "cost_usd_cents": cost_usd_cents,
             }
-            idx += 1
 
-    return venue_info_map
+        return venue_info_map
+
+    except Exception as e:
+        # Fallback to empty dict if LLM extraction fails
+        print(f"Warning: LLM extraction failed: {e}. Using empty venue map.")
+        return {}
+
+
+def _extract_lodging_info_from_rag(chunks: list[str]) -> dict[int, dict[str, any]]:
+    """Extract lodging information from RAG chunks using LLM.
+
+    Parses markdown-formatted RAG chunks to identify hotel names, tiers,
+    and amenities.
+
+    Args:
+        chunks: List of knowledge chunk texts (markdown formatted)
+
+    Returns:
+        Dict mapping index to lodging info dict with keys: name, tier, amenities, price_per_night_usd_cents
+    """
+    if not chunks:
+        return {}
+
+    # Combine chunks for LLM analysis (limit to prevent token overflow)
+    combined_text = "\n\n".join(chunks[:20])  # Limit to first 20 chunks
+
+    # Create prompt for LLM extraction
+    prompt = f"""Extract hotel/lodging information from this travel guide text. Look for hotels, hostels, accommodations, etc.
+
+For each lodging option, extract:
+- name: The full name of the hotel/lodging
+- tier: Category (budget, mid, luxury, or boutique)
+- amenities: List of notable features/amenities mentioned
+- neighborhood: Location/district if mentioned
+
+Text:
+{combined_text}
+
+Return a JSON array of lodging options. Example format:
+[
+  {{"name": "Hotel Villa Magna", "tier": "luxury", "amenities": ["Rosewood", "Salamanca district"], "neighborhood": "Salamanca"}},
+  {{"name": "The Hat Madrid", "tier": "budget", "amenities": ["hostel", "rooftop terrace"], "neighborhood": "city center"}}
+]
+
+IMPORTANT:
+- Only extract entries that are clearly identifiable hotels/lodging with proper names
+- Categorize tier based on context (luxury hotels, mid-range, budget-friendly, boutique)
+- Do NOT invent information not in the text"""
+
+    try:
+        settings = get_settings()
+        client = OpenAI(api_key=settings.openai_api_key)
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",  # Use faster, cheaper model for extraction
+            messages=[
+                {"role": "system", "content": "You are a precise data extractor. Return only valid JSON arrays."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.0,  # Deterministic extraction
+            max_tokens=2000
+        )
+
+        content = response.choices[0].message.content
+        # Extract JSON from markdown code blocks if present
+        if "```json" in content:
+            content = content.split("```json")[1].split("```")[0].strip()
+        elif "```" in content:
+            content = content.split("```")[1].split("```")[0].strip()
+
+        lodging_options = json.loads(content)
+
+        # Convert to the expected format with tier-based pricing
+        lodging_info_map = {}
+        tier_pricing = {
+            "budget": (6000, 9000),      # $60-90/night
+            "mid": (12000, 18000),       # $120-180/night
+            "luxury": (30000, 40000),    # $300-400/night
+            "boutique": (15000, 25000),  # $150-250/night
+        }
+
+        for idx, lodging in enumerate(lodging_options):
+            tier = lodging.get("tier", "mid").lower()
+
+            # Estimate price based on tier
+            if tier in tier_pricing:
+                min_price, max_price = tier_pricing[tier]
+                # Use midpoint of tier range
+                estimated_price = (min_price + max_price) // 2
+            else:
+                estimated_price = 15000  # Default $150/night
+
+            lodging_info_map[idx] = {
+                "name": lodging.get("name"),
+                "tier": tier,
+                "amenities": lodging.get("amenities", []),
+                "neighborhood": lodging.get("neighborhood"),
+                "price_per_night_usd_cents": estimated_price,
+            }
+
+        return lodging_info_map
+
+    except Exception as e:
+        # Fallback to empty dict if LLM extraction fails
+        print(f"Warning: Lodging extraction failed: {e}. Using empty lodging map.")
+        return {}
 
 
 def intent_node(state: OrchestratorState) -> OrchestratorState:
@@ -233,8 +371,8 @@ def selector_node(state: OrchestratorState) -> OrchestratorState:
 
         branch_features.append(BranchFeatures(plan=plan, features=features))
 
-    # Score branches using PR6 selector
-    scored_plans = score_branches(branch_features)
+    # Score branches using PR6 selector with budget-aware scoring
+    scored_plans = score_branches(branch_features, state.intent)
 
     if scored_plans:
         # Select the highest-scored plan
@@ -337,8 +475,41 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
         tier_prefs=[Tier.budget, Tier.mid, Tier.luxury],
     )
 
-    # Populate state.lodgings dictionary with real data
-    for lodging in lodging_options:
+    # Extract lodging info from RAG chunks to enrich with real names
+    lodging_keywords = _extract_lodging_info_from_rag(state.rag_chunks)
+
+    # Populate state.lodgings dictionary and enrich with RAG data
+    for idx, lodging in enumerate(lodging_options):
+        # Try to match RAG lodging by tier
+        matching_rag = None
+        if lodging_keywords:
+            try:
+                # Find RAG lodging with matching tier
+                for rag_idx, rag_info in lodging_keywords.items():
+                    rag_tier = rag_info.get("tier", "").lower()
+                    # Safely access tier value
+                    if hasattr(lodging.tier, 'value'):
+                        lodging_tier = lodging.tier.value.lower()
+                    else:
+                        lodging_tier = str(lodging.tier).lower()
+
+                    # Match tiers (handle mid/mid-range variations)
+                    if rag_tier == lodging_tier or (rag_tier == "mid-range" and lodging_tier == "mid"):
+                        # Check if this RAG lodging hasn't been used yet
+                        if not any(l.name == rag_info.get("name") for l in state.lodgings.values()):
+                            matching_rag = rag_info
+                            break
+            except (AttributeError, TypeError) as e:
+                print(f"Warning: Error matching lodging tier for {lodging.name}: {e}")
+                pass
+
+        # If we have RAG data, use it to enrich the lodging
+        if matching_rag:
+            lodging.name = matching_rag.get("name") or lodging.name
+            # Use RAG-estimated price if available
+            if matching_rag.get("price_per_night_usd_cents"):
+                lodging.price_per_night_usd_cents = matching_rag["price_per_night_usd_cents"]
+
         state.lodgings[lodging.lodging_id] = lodging
     state.tool_call_counts["lodging"] = len(lodging_options)
 
@@ -365,10 +536,13 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
                         venue_type = venue_info.get("type", "attraction")
                         indoor = venue_info.get("indoor", None)
                         name = venue_info.get("name") or f"Attraction {choice.option_ref}"
+                        # Use cost from RAG extraction if available, otherwise use plan's cost
+                        cost_usd_cents = venue_info.get("cost_usd_cents") or choice.features.cost_usd_cents
                     else:
                         venue_type = "museum"
                         indoor = choice.features.indoor if choice.features.indoor is not None else True
                         name = f"Attraction {choice.option_ref}"
+                        cost_usd_cents = choice.features.cost_usd_cents
 
                     state.attractions[choice.option_ref] = Attraction(
                         id=choice.option_ref,
@@ -386,7 +560,7 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
                             "6": [],
                         },
                         location=Geo(lat=48.8566, lon=2.3522),
-                        est_price_usd_cents=choice.features.cost_usd_cents,
+                        est_price_usd_cents=cost_usd_cents,
                         provenance=choice.provenance,
                     )
                     attraction_count += 1
@@ -445,13 +619,15 @@ def _find_best_lodging(available_lodging: list, desired_features):
         return None
 
     target_cost = desired_features.cost_usd_cents if desired_features else 15000
-    candidates = [
-        l for l in available_lodging
-        if abs(l.price_per_night_usd_cents - target_cost) / max(target_cost, 1) < 0.5
-    ]
-
-    candidates = candidates if candidates else available_lodging
-    return min(candidates, key=lambda l: l.price_per_night_usd_cents)
+    
+    # Find lodging closest to target cost (not always cheapest!)
+    # This respects the budget-aware planning that sets target costs
+    best_lodging = min(
+        available_lodging,
+        key=lambda l: abs(l.price_per_night_usd_cents - target_cost)
+    )
+    
+    return best_lodging
 
 
 def resolve_node(state: OrchestratorState) -> OrchestratorState:
@@ -752,12 +928,14 @@ def synth_node(state: OrchestratorState) -> OrchestratorState:
             name = f"{choice.kind.value.title()}"
             geo: Geo | None = None
             notes_parts: list[str] = []
+            activity_cost: int | None = None  # Track individual activity cost
 
             # Resolve tool results based on kind
             if choice.kind == ChoiceKind.flight and choice.option_ref in state.flights:
                 flight = state.flights[choice.option_ref]
                 name = f"{flight.origin} → {flight.dest}"
                 notes_parts.append(f"Departure: {flight.departure.strftime('%H:%M')}")
+                activity_cost = flight.price_usd_cents
                 flights_cost += flight.price_usd_cents
 
                 # Create citation for flight details
@@ -778,6 +956,9 @@ def synth_node(state: OrchestratorState) -> OrchestratorState:
                 notes_parts.append(f"{lodging.tier.value.title()} tier")
                 if lodging.kid_friendly:
                     notes_parts.append("Kid-friendly")
+
+                # Track per-night cost for display (total lodging cost calculated later)
+                activity_cost = lodging.price_per_night_usd_cents
 
                 # Track lodging nights (each day with lodging = 1 night)
                 lodging_nights[choice.option_ref] = lodging_nights.get(choice.option_ref, 0) + 1
@@ -812,6 +993,7 @@ def synth_node(state: OrchestratorState) -> OrchestratorState:
                     notes_parts.append(attr.venue_type.title())
 
                 if attr.est_price_usd_cents is not None:
+                    activity_cost = attr.est_price_usd_cents
                     attractions_cost += attr.est_price_usd_cents
 
                 # Citation for attraction
@@ -829,6 +1011,7 @@ def synth_node(state: OrchestratorState) -> OrchestratorState:
                 leg = state.transit_legs[choice.option_ref]
                 name = f"{leg.mode.value.title()} transit"
                 notes_parts.append(f"~{leg.duration_seconds // 60} minutes")
+                activity_cost = choice.features.cost_usd_cents
                 transit_cost += choice.features.cost_usd_cents
 
                 # Citation for transit
@@ -845,6 +1028,7 @@ def synth_node(state: OrchestratorState) -> OrchestratorState:
                     f"Warning: Using estimated cost for {choice.kind.value} {choice.option_ref} "
                     f"(tool result not found)"
                 )
+                activity_cost = choice.features.cost_usd_cents
                 notes_parts.append(f"Estimated cost: ${choice.features.cost_usd_cents / 100:.2f}")
 
                 # Still count cost by type using estimated values
@@ -868,6 +1052,7 @@ def synth_node(state: OrchestratorState) -> OrchestratorState:
                     geo=geo,
                     notes=notes,
                     locked=slot.locked,
+                    cost_usd_cents=activity_cost,
                 )
             )
 
