@@ -222,6 +222,45 @@ def _build_plan_variant(
 
         # Start with any locked slots for this day
         slots = []
+        
+        # Add flight slots for arrival and departure days
+        if day_offset == 0:  # Arrival day - add outbound flight
+            outbound_flight_choice = Choice(
+                kind=ChoiceKind.flight,
+                option_ref="outbound_flight_placeholder",  # Will be resolved later
+                features=ChoiceFeatures(
+                    cost_usd_cents=int(75000 * cost_multiplier),  # Estimated $750 base
+                    travel_seconds=28800,  # 8 hours typical
+                    indoor=None,
+                    themes=None,
+                ),
+                score=0.8,
+                provenance=Provenance(source="planner", fetched_at=datetime.now(UTC)),
+            )
+            slots.append(Slot(
+                window=TimeWindow(start=time(10, 0), end=time(18, 0)),
+                choices=[outbound_flight_choice],
+                locked=False,
+            ))
+        
+        if day_offset == trip_days - 1:  # Departure day - add return flight
+            return_flight_choice = Choice(
+                kind=ChoiceKind.flight,
+                option_ref="return_flight_placeholder",  # Will be resolved later
+                features=ChoiceFeatures(
+                    cost_usd_cents=int(75000 * cost_multiplier),  # Estimated $750 base
+                    travel_seconds=28800,  # 8 hours typical
+                    indoor=None,
+                    themes=None,
+                ),
+                score=0.8,
+                provenance=Provenance(source="planner", fetched_at=datetime.now(UTC)),
+            )
+            slots.append(Slot(
+                window=TimeWindow(start=time(14, 0), end=time(22, 0)),
+                choices=[return_flight_choice],
+                locked=False,
+            ))
         if day_offset in locked_slots_by_day:
             for locked_slot in locked_slots_by_day[day_offset]:
                 # Convert locked slot to our format

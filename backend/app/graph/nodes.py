@@ -449,7 +449,7 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
         )
         state.tool_call_counts["weather"] = state.tool_call_counts.get("weather", 0) + 1
 
-    # Fetch real flight data using adapter
+    # Fetch real flight data using adapter with budget-aware selection
     from backend.app.adapters.flights import get_flights
 
     flight_options = get_flights(
@@ -457,6 +457,8 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
         dest=state.intent.city,
         date_window=(state.intent.date_window.start, state.intent.date_window.end),
         avoid_overnight=state.intent.prefs.avoid_overnight if state.intent.prefs else False,
+        tier_prefs=None,  # Let the adapter determine tiers based on budget
+        budget_usd_cents=state.intent.budget_usd_cents,
     )
 
     # Populate state.flights dictionary with real data
@@ -578,14 +580,16 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
 
 
 def _find_best_flight(
-    available_flights: list, desired_features, time_window
+    available_flights: list, desired_features, time_window, day_index: int = 0, trip_days: int = 5
 ):
-    """Find best matching flight based on cost preferences.
+    """Find best matching flight based on cost preferences and direction.
 
     Args:
         available_flights: List of FlightOption objects
         desired_features: ChoiceFeatures with target cost
-        time_window: TimeWindow for the slot (not used currently)
+        time_window: TimeWindow for the slot
+        day_index: Day index in trip (0 = first day, trip_days-1 = last day)
+        trip_days: Total number of days in trip
 
     Returns:
         Best matching FlightOption or None
@@ -593,16 +597,38 @@ def _find_best_flight(
     if not available_flights:
         return None
 
+    # Determine if this is outbound or return based on day
+    is_outbound = day_index == 0
+    is_return = day_index == trip_days - 1
+
+    # Filter flights by direction if we can determine origin/destination
+    direction_filtered = []
+    if available_flights:
+        for flight in available_flights:
+            if is_outbound:
+                # For outbound, we want flights FROM departure airport TO destination
+                # Assuming JFK -> GIG pattern for outbound
+                if any(airport in flight.origin for airport in ['JFK', 'LGA', 'EWR']) and 'GIG' in flight.dest:
+                    direction_filtered.append(flight)
+            elif is_return:
+                # For return, we want flights FROM destination TO departure airport  
+                # Assuming GIG -> JFK pattern for return
+                if 'GIG' in flight.origin and any(airport in flight.dest for airport in ['JFK', 'LGA', 'EWR']):
+                    direction_filtered.append(flight)
+    
+    # Use direction filtered flights if available, otherwise use all
+    candidate_flights = direction_filtered if direction_filtered else available_flights
+
     # Filter by rough cost match (within 50% of desired to be more flexible)
     target_cost = desired_features.cost_usd_cents if desired_features else 50000
     candidates = [
-        f for f in available_flights
+        f for f in candidate_flights
         if abs(f.price_usd_cents - target_cost) / max(target_cost, 1) < 0.5
     ]
 
     # Return cheapest if we have matches, otherwise cheapest overall
-    candidates = candidates if candidates else available_flights
-    return min(candidates, key=lambda f: f.price_usd_cents)
+    candidates = candidates if candidates else candidate_flights
+    return min(candidates, key=lambda f: f.price_usd_cents) if candidates else None
 
 
 def _find_best_lodging(available_lodging: list, desired_features):
@@ -645,8 +671,9 @@ def resolve_node(state: OrchestratorState) -> OrchestratorState:
         return state
 
     resolved_count = 0
+    trip_days = len(state.plan.days)
 
-    for day_plan in state.plan.days:
+    for day_index, day_plan in enumerate(state.plan.days):
         for slot in day_plan.slots:
             # Get the top choice for this slot
             if not slot.choices:
@@ -655,11 +682,13 @@ def resolve_node(state: OrchestratorState) -> OrchestratorState:
             choice = slot.choices[0]
 
             if choice.kind == ChoiceKind.flight:
-                # Find best matching flight from available options
+                # Find best matching flight from available options with direction awareness
                 best_flight = _find_best_flight(
                     available_flights=list(state.flights.values()),
                     desired_features=choice.features,
                     time_window=slot.window,
+                    day_index=day_index,
+                    trip_days=trip_days,
                 )
                 if best_flight:
                     # Update choice to reference real flight with real price
