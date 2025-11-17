@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/api/destinations.py
+# hypothesis_version: 6.147.0
+
+[-180, 100, 180, 200, '/destinations', '/{dest_id}', 'city', 'destinations', 'lat', 'lon']

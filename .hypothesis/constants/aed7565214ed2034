@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/api/chat.py
+# hypothesis_version: 6.147.0
+
+[10000, '/chat', "Assistant's response", 'Message content', "User's message", 'budget_usd_cents', 'chat', 'date_window', 'end', 'prefs', 'start']

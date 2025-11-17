@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/planning/selector.py
+# hypothesis_version: 6.147.0
+
+[-1.5, -1.0, -0.5, -0.3, 0.0, 0.3, 0.5, 0.6, 1.0, 1.5, 3.0, 5.0, 600.0, 1800.0, 3500.0, 23000, 'Plan scoring summary', 'cost', 'cost_weight', 'feature_vector', 'final_score', 'indoor_pref', 'max', 'min', 'plan_id', 'plan_rank', 'score_range', 'spread', 'theme_match', 'total_plans', 'travel_time']

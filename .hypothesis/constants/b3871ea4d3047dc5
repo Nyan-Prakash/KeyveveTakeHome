@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/api/plan.py
+# hypothesis_version: 6.147.0
+
+[0.1, 1.0, 10000, '+00:00', '/plan', '/{run_id}', '/{run_id}/edit', '/{run_id}/stream', 'Agent run not found', 'Z', 'budget_usd_cents', 'completed', 'completed_at', 'cost_usd', 'created_at', 'data', 'date_window', 'end', 'error', 'event', 'heartbeat', 'id', 'itinerary', 'kind', 'message', 'node_timings', 'payload', 'plan', 'prefs', 'replay', 'run_id', 'start', 'status', 'tool_call_counts', 'ts', 'violations', 'weather_by_date']

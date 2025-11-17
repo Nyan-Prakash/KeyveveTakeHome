@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/db/models/org.py
+# hypothesis_version: 6.147.0
+
+['AgentRun', 'Destination', 'Itinerary', 'KnowledgeItem', 'User', 'all, delete-orphan', 'org']

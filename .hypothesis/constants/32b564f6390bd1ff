@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/verify/preferences.py
+# hypothesis_version: 6.147.0
+
+[0.5, 'attraction', 'avoid_overnight', 'cutoff', 'flight', 'flight_id', 'kid_friendly', 'late_night_activity', 'low_theme_coverage', 'match_rate', 'matching_slots', 'not_kid_friendly', 'preference', 'reason', 'requested_themes', 'slot_end', 'theme_coverage', 'themes', 'total_slots', 'unknown_kid_friendly', 'venue_name']

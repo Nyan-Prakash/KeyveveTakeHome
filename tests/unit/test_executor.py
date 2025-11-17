@@ -63,13 +63,28 @@ def clock() -> FakeClock:
 @pytest.fixture
 def settings() -> Settings:
     """Create test settings."""
+    from backend.app.config import get_settings
+    
+    # Get the real settings to inherit actual API keys and other config
+    real_settings = get_settings()
+    
     return Settings(
+        # Override specific test values
         soft_timeout_s=2.0,
         hard_timeout_s=4.0,
         retry_jitter_min_ms=200,
         retry_jitter_max_ms=500,
         breaker_failure_threshold=5,
         breaker_timeout_s=60,
+        # Keep the real API keys and other configurations
+        openai_api_key=real_settings.openai_api_key,
+        weather_api_key=real_settings.weather_api_key,
+        postgres_url=real_settings.postgres_url,
+        redis_url=real_settings.redis_url,
+        ui_origin=real_settings.ui_origin,
+        jwt_private_key_pem=real_settings.jwt_private_key_pem,
+        jwt_public_key_pem=real_settings.jwt_public_key_pem,
+        openai_model=real_settings.openai_model,
     )
 
 

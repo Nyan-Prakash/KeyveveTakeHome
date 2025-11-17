@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/verify/feasibility.py
+# hypothesis_version: 6.147.0
+
+['activity_end', 'airport', 'attraction', 'available_windows', 'buffer_minutes', 'buffer_type', 'closed_all_day', 'current_end', 'date', 'day_of_week', 'end', 'flight', 'gap_minutes', 'in-city transit', 'last_train', 'last_train_missed', 'latest_end', 'museum', 'next_start', 'no_opening_hours', 'reason', 'required_minutes', 'slot_end', 'slot_start', 'start', 'timing', 'venue_closed', 'venue_name']

@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/verify/budget.py
+# hypothesis_version: 6.147.0
+
+[1.1, 'attraction', 'attraction_cost', 'budget_check', 'budget_exceeded', 'budget_usd_cents', 'daily_spend_cost', 'flight', 'flight_cost', 'lodging', 'lodging_cost', 'over_by_usd_cents', 'total_cost_usd_cents', 'transit', 'transit_cost']

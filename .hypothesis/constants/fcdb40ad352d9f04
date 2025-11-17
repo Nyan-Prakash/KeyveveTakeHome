@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/verify/weather.py
+# hypothesis_version: 6.147.0
+
+[0.6, 30.0, 'advisory', 'blocking', 'date', 'indoor', 'precip_prob', 'reason', 'severity', 'uncertain_weather', 'wind_kmh']

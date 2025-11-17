@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/metrics/registry.py
+# hypothesis_version: 6.147.0
+
+[0.0, 'attempts', 'avg', 'avg_cycles', 'avg_moves', 'avg_reuse', 'closed', 'count', 'half_open', 'max', 'min', 'open', 'success_rate', 'successes']
