@@ -27,6 +27,7 @@ from backend.app.models.plan import (
 )
 from backend.app.planning import build_candidate_plans, score_branches
 from backend.app.planning.types import BranchFeatures
+from backend.app.planning.simple_transit import simple_inject_transit
 
 from .state import OrchestratorState
 
@@ -257,15 +258,34 @@ def planner_node(state: OrchestratorState) -> OrchestratorState:
     # Generate candidate plans using PR6 logic
     candidate_plans = build_candidate_plans(state.intent)
 
+    # Inject transit between activities for all candidate plans
+    state.messages.append("Injecting transit between activities...")
+    enhanced_plans = []
+    for plan in candidate_plans:
+        try:
+            enhanced_plan = simple_inject_transit(plan, state.intent)
+            enhanced_plans.append(enhanced_plan)
+            
+            # Count added transit slots
+            original_slots = sum(len(day.slots) for day in plan.days)
+            enhanced_slots = sum(len(day.slots) for day in enhanced_plan.days)
+            transit_added = enhanced_slots - original_slots
+            state.messages.append(f"Added {transit_added} transit slots to plan")
+            
+        except Exception as e:
+            # Fall back to original plan if transit injection fails
+            state.messages.append(f"Warning: Transit injection failed, using basic plan: {e}")
+            enhanced_plans.append(plan)
+
     # For now, take the first plan as our working plan
     # The selector will choose between alternatives in the next step
-    if candidate_plans:
-        state.plan = candidate_plans[0]
-        state.messages.append(f"Generated {len(candidate_plans)} candidate plans")
+    if enhanced_plans:
+        state.plan = enhanced_plans[0]
+        state.messages.append(f"Generated {len(enhanced_plans)} candidate plans with transit")
         state.messages.append(f"Selected plan with {len(state.plan.days)} days")
 
-        # Store all candidates in state for selector to use
-        state.candidate_plans = list(candidate_plans)
+        # Store all enhanced candidates in state for selector to use
+        state.candidate_plans = list(enhanced_plans)
     else:
         state.messages.append("Failed to generate any candidate plans")
         # Fall back to stub plan

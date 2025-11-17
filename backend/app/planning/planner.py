@@ -3,6 +3,7 @@
 import random
 from collections.abc import Sequence
 from datetime import UTC, datetime, time, timedelta
+from uuid import UUID
 
 from backend.app.models.common import ChoiceKind, Provenance, TimeWindow
 from backend.app.models.intent import IntentV1, LockedSlot
@@ -14,6 +15,7 @@ from backend.app.models.plan import (
     PlanV1,
     Slot,
 )
+from backend.app.planning.transit_injector import inject_transit_between_activities
 
 
 def build_candidate_plans(intent: IntentV1) -> Sequence[PlanV1]:
