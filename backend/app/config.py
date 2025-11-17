@@ -39,6 +39,13 @@ class Settings(BaseSettings):
     weather_api_key: str = Field(
         default="dummy-weather-api-key-for-tests", description="OpenWeatherMap API key"
     )
+    openai_api_key: str = Field(
+        default="dummy-openai-api-key-for-tests",
+        description="OpenAI API key for chat interface",
+    )
+    openai_model: str = Field(
+        default="gpt-4-turbo-preview", description="OpenAI model for chat"
+    )
 
     # Performance Settings
     fanout_cap: int = Field(default=4, description="Max concurrent branches in planner")

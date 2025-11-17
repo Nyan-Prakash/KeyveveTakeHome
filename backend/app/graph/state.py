@@ -106,3 +106,9 @@ class OrchestratorState(BaseModel):
         default_factory=dict,
         description="Count of tool calls per tool type",
     )
+
+    # RAG knowledge chunks (PR11)
+    rag_chunks: list[str] = Field(
+        default_factory=list,
+        description="Retrieved knowledge chunks from RAG for destination",
+    )

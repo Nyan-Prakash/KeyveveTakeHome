@@ -17,7 +17,9 @@ from backend.app.models.intent import IntentV1
 from .nodes import (
     intent_node,
     planner_node,
+    rag_node,
     repair_node,
+    resolve_node,
     responder_node,
     selector_node,
     synth_node,
@@ -31,7 +33,9 @@ NODE_FUNCTIONS = {
     "intent": intent_node,
     "planner": planner_node,
     "selector": selector_node,
+    "rag": rag_node,
     "tool_exec": tool_exec_node,
+    "resolve": resolve_node,
     "verifier": verifier_node,
     "repair": repair_node,
     "synth": synth_node,
@@ -43,7 +47,7 @@ def _build_graph() -> Any:
     """Build the LangGraph orchestrator graph.
 
     Graph flow:
-        Intent → Planner → Selector → ToolExec → Verifier → Repair → Synth → Responder
+        Intent → Planner → Selector → RAG → ToolExec → Resolve → Verifier → Repair → Synth → Responder
 
     Returns:
         Compiled LangGraph graph
@@ -55,18 +59,22 @@ def _build_graph() -> Any:
     graph.add_node("intent", intent_node)
     graph.add_node("planner", planner_node)
     graph.add_node("selector", selector_node)
+    graph.add_node("rag", rag_node)
     graph.add_node("tool_exec", tool_exec_node)
+    graph.add_node("resolve", resolve_node)
     graph.add_node("verifier", verifier_node)
     graph.add_node("repair", repair_node)
     graph.add_node("synth", synth_node)
     graph.add_node("responder", responder_node)
 
-    # Define edges (linear flow for PR4)
+    # Define edges (linear flow with RAG integration and resolution)
     graph.set_entry_point("intent")
     graph.add_edge("intent", "planner")
     graph.add_edge("planner", "selector")
-    graph.add_edge("selector", "tool_exec")
-    graph.add_edge("tool_exec", "verifier")
+    graph.add_edge("selector", "rag")
+    graph.add_edge("rag", "tool_exec")
+    graph.add_edge("tool_exec", "resolve")
+    graph.add_edge("resolve", "verifier")
     graph.add_edge("verifier", "repair")
     graph.add_edge("repair", "synth")
     graph.add_edge("synth", "responder")
@@ -115,7 +123,9 @@ def _execute_graph(
             "intent",
             "planner",
             "selector",
+            "rag",
             "tool_exec",
+            "resolve",
             "verifier",
             "repair",
             "synth",

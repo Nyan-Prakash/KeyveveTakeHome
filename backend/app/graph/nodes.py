@@ -1,6 +1,7 @@
 """LangGraph nodes implementing PR6 planner and selector logic."""
 
 import random
+import re
 from datetime import UTC, datetime, time, timedelta
 
 from backend.app.models.common import ChoiceKind, Geo, Provenance, TimeWindow
@@ -24,6 +25,75 @@ from backend.app.planning import build_candidate_plans, score_branches
 from backend.app.planning.types import BranchFeatures
 
 from .state import OrchestratorState
+
+
+def _extract_venue_info_from_rag(chunks: list[str]) -> dict[int, dict[str, any]]:
+    """Extract venue information from RAG chunks.
+
+    Parses chunks to identify venue types, names, and characteristics.
+
+    Args:
+        chunks: List of knowledge chunk texts
+
+    Returns:
+        Dict mapping index to venue info dict with keys: name, type, indoor
+    """
+    venue_info_map = {}
+
+    # Keywords for venue type detection
+    venue_keywords = {
+        "temple": ["temple", "shrine", "sacred", "worship"],
+        "garden": ["garden", "park", "botanical"],
+        "museum": ["museum", "gallery", "exhibition"],
+        "restaurant": ["restaurant", "cafe", "dining", "food"],
+        "market": ["market", "shopping", "bazaar"],
+        "theater": ["theater", "theatre", "performance"],
+        "castle": ["castle", "palace", "fortress"],
+        "beach": ["beach", "shore", "coast"],
+        "mountain": ["mountain", "peak", "hiking"],
+    }
+
+    # Indoor likelihood for each type
+    indoor_by_type = {
+        "temple": None,  # Can be indoor or outdoor
+        "garden": False,
+        "museum": True,
+        "restaurant": True,
+        "market": None,
+        "theater": True,
+        "castle": None,
+        "beach": False,
+        "mountain": False,
+    }
+
+    idx = 0
+    for chunk in chunks:
+        chunk_lower = chunk.lower()
+
+        # Extract venue names (look for capitalized words or phrases)
+        # Simple heuristic: find words after "visit", "see", "explore"
+        name_pattern = r"(?:visit|see|explore|famous for|known for)\s+(?:the\s+)?([A-Z][a-zA-Z\s]{3,30})"
+        name_matches = re.findall(name_pattern, chunk)
+
+        # Detect venue type
+        detected_type = "attraction"  # Default
+        for vtype, keywords in venue_keywords.items():
+            if any(keyword in chunk_lower for keyword in keywords):
+                detected_type = vtype
+                break
+
+        # Extract venue name if found
+        venue_name = name_matches[0].strip() if name_matches else None
+
+        if venue_name or detected_type != "attraction":
+            venue_info_map[idx] = {
+                "name": venue_name,
+                "type": detected_type,
+                "indoor": indoor_by_type.get(detected_type),
+            }
+            idx += 1
+
+    return venue_info_map
 
 
 def intent_node(state: OrchestratorState) -> OrchestratorState:
@@ -179,6 +249,35 @@ def selector_node(state: OrchestratorState) -> OrchestratorState:
     return state
 
 
+def rag_node(state: OrchestratorState) -> OrchestratorState:
+    """Retrieve relevant knowledge chunks from RAG for the destination.
+
+    This node queries the embedding table for knowledge chunks related to
+    the destination city, which will be used to enrich attraction data.
+    """
+    from backend.app.graph.rag import retrieve_knowledge_for_destination
+
+    state.messages.append("Retrieving local knowledge...")
+    state.last_event_ts = datetime.now(UTC)
+
+    # Retrieve knowledge chunks for the destination city
+    city = state.intent.city
+    org_id = state.org_id
+
+    chunks = retrieve_knowledge_for_destination(org_id=org_id, city=city, limit=20)
+
+    if chunks:
+        state.rag_chunks = chunks
+        state.messages.append(f"Retrieved {len(chunks)} knowledge chunks for {city}")
+        state.tool_call_counts["rag"] = len(chunks)
+    else:
+        state.messages.append(f"No local knowledge found for {city}")
+        state.rag_chunks = []
+
+    state.last_event_ts = datetime.now(UTC)
+    return state
+
+
 def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
     """Execute tools to gather data.
 
@@ -212,17 +311,45 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
         )
         state.tool_call_counts["weather"] = state.tool_call_counts.get("weather", 0) + 1
 
-    # Simulate flights tool calls (outbound + return)
-    state.tool_call_counts["flights"] = 2
+    # Fetch real flight data using adapter
+    from backend.app.adapters.flights import get_flights
 
-    # Simulate lodging tool call
-    state.tool_call_counts["lodging"] = 1
+    flight_options = get_flights(
+        origin=state.intent.airports[0] if state.intent.airports else "JFK",
+        dest=state.intent.city,
+        date_window=(state.intent.date_window.start, state.intent.date_window.end),
+        avoid_overnight=state.intent.prefs.avoid_overnight if state.intent.prefs else False,
+    )
+
+    # Populate state.flights dictionary with real data
+    for flight in flight_options:
+        state.flights[flight.flight_id] = flight
+    state.tool_call_counts["flights"] = len(flight_options)
+
+    # Fetch real lodging data using adapter
+    from backend.app.adapters.lodging import get_lodging
+    from backend.app.models.common import Tier
+
+    lodging_options = get_lodging(
+        city=state.intent.city,
+        checkin=state.intent.date_window.start,
+        checkout=state.intent.date_window.end,
+        tier_prefs=[Tier.budget, Tier.mid, Tier.luxury],
+    )
+
+    # Populate state.lodgings dictionary with real data
+    for lodging in lodging_options:
+        state.lodgings[lodging.lodging_id] = lodging
+    state.tool_call_counts["lodging"] = len(lodging_options)
 
     # Simulate FX tool call
     state.tool_call_counts["fx"] = 1
 
     # Populate attractions from plan and track tool calls
+    # Use RAG chunks to enrich attraction data if available
     attraction_count = 0
+    rag_keywords = _extract_venue_info_from_rag(state.rag_chunks)
+
     for day_plan in state.plan.days:
         for slot in day_plan.slots:
             for choice in slot.choices:
@@ -230,16 +357,24 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
                     choice.kind == ChoiceKind.attraction
                     and choice.option_ref not in state.attractions
                 ):
-                    # Create stub attraction matching the choice
+                    # Try to extract venue info from RAG chunks
+                    venue_info = rag_keywords.get(attraction_count % len(rag_keywords)) if rag_keywords else None
+
+                    # Use RAG data if available, otherwise fall back to stub
+                    if venue_info:
+                        venue_type = venue_info.get("type", "attraction")
+                        indoor = venue_info.get("indoor", None)
+                        name = venue_info.get("name") or f"Attraction {choice.option_ref}"
+                    else:
+                        venue_type = "museum"
+                        indoor = choice.features.indoor if choice.features.indoor is not None else True
+                        name = f"Attraction {choice.option_ref}"
+
                     state.attractions[choice.option_ref] = Attraction(
                         id=choice.option_ref,
-                        name=f"Attraction {choice.option_ref}",
-                        venue_type="museum",
-                        indoor=(
-                            choice.features.indoor
-                            if choice.features.indoor is not None
-                            else True
-                        ),
+                        name=name,
+                        venue_type=venue_type,
+                        indoor=indoor,
                         kid_friendly=False,
                         opening_hours={
                             "0": [],  # Monday
@@ -263,6 +398,124 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
     state.tool_call_counts["transit"] = max(0, total_activities - 1)
 
     state.messages.append(f"Executed {sum(state.tool_call_counts.values())} tool calls")
+    state.last_event_ts = datetime.now(UTC)
+
+    return state
+
+
+def _find_best_flight(
+    available_flights: list, desired_features, time_window
+):
+    """Find best matching flight based on cost preferences.
+
+    Args:
+        available_flights: List of FlightOption objects
+        desired_features: ChoiceFeatures with target cost
+        time_window: TimeWindow for the slot (not used currently)
+
+    Returns:
+        Best matching FlightOption or None
+    """
+    if not available_flights:
+        return None
+
+    # Filter by rough cost match (within 50% of desired to be more flexible)
+    target_cost = desired_features.cost_usd_cents if desired_features else 50000
+    candidates = [
+        f for f in available_flights
+        if abs(f.price_usd_cents - target_cost) / max(target_cost, 1) < 0.5
+    ]
+
+    # Return cheapest if we have matches, otherwise cheapest overall
+    candidates = candidates if candidates else available_flights
+    return min(candidates, key=lambda f: f.price_usd_cents)
+
+
+def _find_best_lodging(available_lodging: list, desired_features):
+    """Find best matching lodging based on cost preferences.
+
+    Args:
+        available_lodging: List of Lodging objects
+        desired_features: ChoiceFeatures with target cost
+
+    Returns:
+        Best matching Lodging or None
+    """
+    if not available_lodging:
+        return None
+
+    target_cost = desired_features.cost_usd_cents if desired_features else 15000
+    candidates = [
+        l for l in available_lodging
+        if abs(l.price_per_night_usd_cents - target_cost) / max(target_cost, 1) < 0.5
+    ]
+
+    candidates = candidates if candidates else available_lodging
+    return min(candidates, key=lambda l: l.price_per_night_usd_cents)
+
+
+def resolve_node(state: OrchestratorState) -> OrchestratorState:
+    """Resolve abstract plan choices to concrete tool results with real pricing.
+
+    Maps the planner's abstract choices (with estimated costs) to actual
+    flights/lodging/attractions that were fetched by tool_exec_node.
+    This ensures the final itinerary uses real pricing data.
+    """
+    state.messages.append("Resolving plan to actual options with real pricing...")
+    state.last_event_ts = datetime.now(UTC)
+
+    if not state.plan:
+        state.messages.append("No plan to resolve")
+        return state
+
+    resolved_count = 0
+
+    for day_plan in state.plan.days:
+        for slot in day_plan.slots:
+            # Get the top choice for this slot
+            if not slot.choices:
+                continue
+
+            choice = slot.choices[0]
+
+            if choice.kind == ChoiceKind.flight:
+                # Find best matching flight from available options
+                best_flight = _find_best_flight(
+                    available_flights=list(state.flights.values()),
+                    desired_features=choice.features,
+                    time_window=slot.window,
+                )
+                if best_flight:
+                    # Update choice to reference real flight with real price
+                    choice.option_ref = best_flight.flight_id
+                    if choice.features:
+                        choice.features.cost_usd_cents = best_flight.price_usd_cents
+                    choice.provenance = Provenance(
+                        source="flights_adapter",
+                        fetched_at=datetime.now(UTC),
+                        cache_hit=False,
+                    )
+                    resolved_count += 1
+
+            elif choice.kind == ChoiceKind.lodging:
+                # Find best matching lodging based on tier preference
+                best_lodging = _find_best_lodging(
+                    available_lodging=list(state.lodgings.values()),
+                    desired_features=choice.features,
+                )
+                if best_lodging:
+                    # Update choice to reference real lodging with real price
+                    choice.option_ref = best_lodging.lodging_id
+                    if choice.features:
+                        choice.features.cost_usd_cents = best_lodging.price_per_night_usd_cents
+                    choice.provenance = Provenance(
+                        source="lodging_adapter",
+                        fetched_at=datetime.now(UTC),
+                        cache_hit=False,
+                    )
+                    resolved_count += 1
+
+    state.messages.append(f"Resolved {resolved_count} choices to real options with accurate pricing")
     state.last_event_ts = datetime.now(UTC)
 
     return state
@@ -484,6 +737,11 @@ def synth_node(state: OrchestratorState) -> OrchestratorState:
     attractions_cost = 0
     transit_cost = 0
 
+    # Track lodging stays to properly calculate multi-night costs
+    # Maps lodging_id -> number of consecutive nights
+    lodging_nights: dict[str, int] = {}
+    processed_lodging_ids: set[str] = set()
+
     for day_plan in state.plan.days:
         activities: list[Activity] = []
 
@@ -520,15 +778,19 @@ def synth_node(state: OrchestratorState) -> OrchestratorState:
                 notes_parts.append(f"{lodging.tier.value.title()} tier")
                 if lodging.kid_friendly:
                     notes_parts.append("Kid-friendly")
-                lodging_cost += lodging.price_per_night_usd_cents
 
-                # Citation for lodging
-                citations.append(
-                    Citation(
-                        claim=f"Lodging: {lodging.name}",
-                        provenance=lodging.provenance,
+                # Track lodging nights (each day with lodging = 1 night)
+                lodging_nights[choice.option_ref] = lodging_nights.get(choice.option_ref, 0) + 1
+
+                # Citation for lodging (only add once per unique lodging)
+                if choice.option_ref not in processed_lodging_ids:
+                    citations.append(
+                        Citation(
+                            claim=f"Lodging: {lodging.name}",
+                            provenance=lodging.provenance,
+                        )
                     )
-                )
+                    processed_lodging_ids.add(choice.option_ref)
 
             elif (
                 choice.kind == ChoiceKind.attraction
@@ -579,9 +841,13 @@ def synth_node(state: OrchestratorState) -> OrchestratorState:
             else:
                 # Fallback: use features but no detailed tool result
                 # "No evidence, no claim" - be generic
-                notes_parts.append(f"Cost: ${choice.features.cost_usd_cents / 100:.2f}")
+                state.messages.append(
+                    f"Warning: Using estimated cost for {choice.kind.value} {choice.option_ref} "
+                    f"(tool result not found)"
+                )
+                notes_parts.append(f"Estimated cost: ${choice.features.cost_usd_cents / 100:.2f}")
 
-                # Still count cost by type
+                # Still count cost by type using estimated values
                 if choice.kind == ChoiceKind.flight:
                     flights_cost += choice.features.cost_usd_cents
                 elif choice.kind == ChoiceKind.lodging:
@@ -606,6 +872,12 @@ def synth_node(state: OrchestratorState) -> OrchestratorState:
             )
 
         days.append(DayItinerary(day_date=day_plan.date, activities=activities))
+
+    # Calculate total lodging cost (price_per_night * number of nights)
+    for lodging_id, num_nights in lodging_nights.items():
+        if lodging_id in state.lodgings:
+            lodging = state.lodgings[lodging_id]
+            lodging_cost += lodging.price_per_night_usd_cents * num_nights
 
     # Add weather citations
     for day_date, weather in state.weather_by_date.items():
