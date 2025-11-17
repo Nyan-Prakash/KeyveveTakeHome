@@ -1,13 +1,20 @@
 """Application configuration and settings."""
 
-from pydantic import Field
+from pathlib import Path
+
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_BASE_DIR = Path(__file__).resolve().parents[2]
+_ENV_FILE = _BASE_DIR / ".env"
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=_ENV_FILE, env_file_encoding="utf-8"
+    )
 
     # Database
     postgres_url: str = Field(
@@ -99,6 +106,19 @@ class Settings(BaseSettings):
     e2e_p95_budget_s: int = Field(
         default=10, description="End-to-end p95 budget in seconds"
     )
+
+    @field_validator("postgres_url", mode="after")
+    @classmethod
+    def _normalize_sqlite_url(cls, value: str) -> str:
+        """Ensure sqlite URLs always point to the repo root."""
+        sqlite_prefixes = ("sqlite:///", "sqlite+pysqlite:///")
+        for prefix in sqlite_prefixes:
+            if value.startswith(prefix):
+                path = value[len(prefix) :]
+                if path and not path.startswith("/"):
+                    abs_path = (_BASE_DIR / path).resolve()
+                    return f"{prefix}{abs_path.as_posix()}"
+        return value
 
 
 _settings: Settings | None = None
