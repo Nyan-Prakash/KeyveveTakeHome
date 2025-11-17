@@ -8,7 +8,7 @@ from typing import Any
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
-from backend.app.config import get_settings
+from backend.app.config import get_settings, get_openai_api_key
 from backend.app.models.intent import IntentV1
 
 
@@ -101,8 +101,7 @@ Important:
 
 def _create_client() -> AsyncOpenAI:
     """Create async OpenAI client."""
-    settings = get_settings()
-    return AsyncOpenAI(api_key=settings.openai_api_key)
+    return AsyncOpenAI(api_key=get_openai_api_key())
 
 
 async def parse_edit_request(

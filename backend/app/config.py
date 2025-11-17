@@ -130,3 +130,19 @@ def get_settings() -> Settings:
     if _settings is None:
         _settings = Settings()
     return _settings
+
+
+class MissingOpenAIKeyError(RuntimeError):
+    """Raised when an OpenAI API key is not configured."""
+
+
+def get_openai_api_key() -> str:
+    """Return a validated OpenAI API key or raise a helpful error."""
+    api_key = (get_settings().openai_api_key or "").strip()
+    if not api_key or api_key.startswith("dummy-"):
+        raise MissingOpenAIKeyError(
+            "OpenAI API key is not configured. "
+            "Set OPENAI_API_KEY in your environment (.env) before using chat features. "
+            "See Docs/ChatPlanFeature.md for setup instructions."
+        )
+    return api_key

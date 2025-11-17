@@ -9,7 +9,7 @@ from typing import Any
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
-from backend.app.config import get_settings
+from backend.app.config import get_settings, get_openai_api_key
 from backend.app.models.intent import DateWindow, IntentV1, Preferences
 
 
@@ -119,8 +119,7 @@ Guidelines:
 
 def _create_client() -> AsyncOpenAI:
     """Create async OpenAI client."""
-    settings = get_settings()
-    return AsyncOpenAI(api_key=settings.openai_api_key)
+    return AsyncOpenAI(api_key=get_openai_api_key())
 
 
 def _validate_and_build_intent(data: dict[str, Any]) -> tuple[IntentV1 | None, list[str]]:

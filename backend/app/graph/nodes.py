@@ -7,8 +7,9 @@ from datetime import UTC, datetime, time, timedelta
 
 from openai import OpenAI
 
-from backend.app.config import get_settings
-from backend.app.models.common import ChoiceKind, Geo, Provenance, TimeWindow, TransitMode
+from backend.app.config import get_openai_api_key
+from backend.app.models.common import ChoiceKind, Geo, Provenance, TimeWindow, TransitMode, compute_response_digest
+from backend.app.models.tool_results import FlightOption
 from backend.app.models.itinerary import (
     Activity,
     Citation,
@@ -71,8 +72,7 @@ Return a JSON array of attractions. Example format:
 IMPORTANT: Only extract entries that are clearly identifiable attractions with proper names, not general categories or descriptions."""
 
     try:
-        settings = get_settings()
-        client = OpenAI(api_key=settings.openai_api_key)
+        client = OpenAI(api_key=get_openai_api_key())
 
         response = client.chat.completions.create(
             model="gpt-4o-mini",  # Use faster, cheaper model for extraction
@@ -169,15 +169,14 @@ Text:
 
 Return a JSON array of flight information. Example format:
 [
-  {{"airline": "LATAM", "route": "JFK-GIG", "origin_airport": "JFK", "dest_airport": "GIG", "price_usd": 650.0, "duration_hours": 9.5}},
+  {{"airline": "LATAM", "route": "JFK-GIG", "origin_airport": "JFK", "dest_airport": "GIG", "price_usd": 610.0, "duration_hours": 9.5}},
   {{"airline": "American Airlines", "route": "LAX-MAD", "origin_airport": "LAX", "dest_airport": "MAD", "price_usd": null, "duration_hours": 11.0}}
 ]
 
 IMPORTANT: Only extract entries that are clearly identifiable airlines or flight information, not general travel descriptions."""
 
     try:
-        settings = get_settings()
-        client = OpenAI(api_key=settings.openai_api_key)
+        client = OpenAI(api_key=get_openai_api_key())
 
         response = client.chat.completions.create(
             model="gpt-4o-mini",  # Use faster, cheaper model for extraction
@@ -263,8 +262,7 @@ Return a JSON array of transit options. Example format:
 IMPORTANT: Only extract entries that are clearly identifiable transit routes or services, not general descriptions."""
 
     try:
-        settings = get_settings()
-        client = OpenAI(api_key=settings.openai_api_key)
+        client = OpenAI(api_key=get_openai_api_key())
 
         response = client.chat.completions.create(
             model="gpt-4o-mini",  # Use faster, cheaper model for extraction
@@ -356,8 +354,7 @@ IMPORTANT:
 - Do NOT invent information not in the text"""
 
     try:
-        settings = get_settings()
-        client = OpenAI(api_key=settings.openai_api_key)
+        client = OpenAI(api_key=get_openai_api_key())
 
         response = client.chat.completions.create(
             model="gpt-4o-mini",  # Use faster, cheaper model for extraction
@@ -653,56 +650,143 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
 
     flight_options = get_flights(
         origin=state.intent.airports[0] if state.intent.airports else "JFK",
-        dest=state.intent.city,
+        dest=state.intent.city or "Rio de Janeiro",  # Provide fallback destination
         date_window=(state.intent.date_window.start, state.intent.date_window.end),
         avoid_overnight=state.intent.prefs.avoid_overnight if state.intent.prefs else False,
         tier_prefs=None,  # Let the adapter determine tiers based on budget
         budget_usd_cents=state.intent.budget_usd_cents,
     )
 
-    # Populate state.flights dictionary with real data and enrich with RAG
+    # Process flight choices from plan and enrich with RAG data
     flight_keywords = _extract_flight_info_from_rag(state.rag_chunks)
-    
-    for idx, flight in enumerate(flight_options):
-        # Try to match RAG flight data by airport codes
-        matching_rag = None
-        if flight_keywords:
-            try:
-                for rag_idx, rag_info in flight_keywords.items():
-                    # Match by airport codes (origin/destination)
-                    rag_origin = rag_info.get("origin_airport", "").upper()
-                    rag_dest = rag_info.get("dest_airport", "").upper()
-                    
-                    if (rag_origin == flight.origin.upper() and rag_dest == flight.dest.upper()) or \
-                       (rag_dest == flight.origin.upper() and rag_origin == flight.dest.upper()):
-                        # Check if this RAG flight hasn't been used yet
-                        if not any(f.flight_id.startswith(rag_info.get("airline", "")) for f in state.flights.values()):
-                            matching_rag = rag_info
-                            break
-            except (AttributeError, TypeError) as e:
-                print(f"Warning: Error matching flight for {flight.flight_id}: {e}")
-                pass
-        
-        # If we have RAG data, use it to enrich the flight
-        if matching_rag:
-            # Update flight ID to include airline name from RAG
-            if matching_rag.get("airline"):
-                flight.flight_id = f"{matching_rag['airline']} {flight.flight_id.split()[-1]}"
-            
-            # Use RAG-derived price if available
-            if matching_rag.get("price_usd_cents"):
-                flight.price_usd_cents = matching_rag["price_usd_cents"]
-            
-            # Use RAG-derived duration if available
-            if matching_rag.get("duration_hours"):
-                flight.duration_seconds = int(matching_rag["duration_hours"] * 3600)
-            
-            # Update provenance to indicate RAG enrichment
-            flight.provenance.source = "fixture+rag"
-            flight.provenance.ref_id = f"enriched:{flight.provenance.ref_id}"
+    flight_count = 0
 
-        state.flights[flight.flight_id] = flight
-    state.tool_call_counts["flights"] = len(flight_options)
+    try:
+        for day_plan in state.plan.days:
+            for slot in day_plan.slots:
+                for choice in slot.choices:
+                    if (
+                        choice.kind == ChoiceKind.flight
+                        and choice.option_ref not in state.flights
+                    ):
+                        # Try to extract flight info from RAG chunks
+                        flight_info = None
+                        if flight_keywords:
+                            # Use round-robin assignment to distribute RAG data across flight choices
+                            flight_info = flight_keywords.get(flight_count % len(flight_keywords))
+
+                        # Try to find a matching fixture flight, or use RAG data to create new flight
+                        matching_flight = None
+                        if flight_options:
+                            # Determine if this is outbound or return based on choice.option_ref
+                            is_outbound = "outbound" in choice.option_ref.lower()
+                            is_return = "return" in choice.option_ref.lower()
+
+                            # Filter flights by direction
+                            for flight in flight_options:
+                                if is_outbound and state.intent.airports:
+                                    # Outbound: from user's airport to destination
+                                    if flight.origin.upper() in [a.upper() for a in state.intent.airports]:
+                                        matching_flight = flight
+                                        break
+                                elif is_return and state.intent.airports:
+                                    # Return: from destination to user's airport  
+                                    if flight.dest.upper() in [a.upper() for a in state.intent.airports]:
+                                        matching_flight = flight
+                                        break
+
+                        # Use RAG data if available, otherwise use fixture or fallback
+                        if flight_info:
+                            # Create flight primarily from RAG data
+                            airline = flight_info.get("airline") or "Unknown Airline"
+                            price_cents = flight_info.get("price_usd_cents") or choice.features.cost_usd_cents
+                            duration_seconds = (
+                                int(flight_info.get("duration_hours", 8) * 3600) 
+                                if flight_info.get("duration_hours") 
+                                else choice.features.travel_seconds
+                            )
+                            
+                            # Use matching flight's details if available, otherwise create from RAG/choice
+                            if matching_flight:
+                                flight_id = f"{airline} {matching_flight.flight_id.split()[-1]}"
+                                origin = matching_flight.origin
+                                dest = matching_flight.dest
+                                departure = matching_flight.departure
+                                arrival = matching_flight.arrival
+                                overnight = matching_flight.overnight
+                            else:
+                                # Create from scratch using RAG + choice data
+                                flight_id = f"{airline} {choice.option_ref}"
+                                origin = flight_info.get("origin_airport") or (state.intent.airports[0] if state.intent.airports else "JFK")
+                                dest = flight_info.get("dest_airport") or "GIG"  # Default destination
+                                
+                                # Create reasonable departure/arrival times based on choice window
+                                departure = datetime.combine(
+                                    day_plan.date, 
+                                    slot.window.start, 
+                                    tzinfo=UTC
+                                )
+                                arrival = departure + timedelta(seconds=duration_seconds)
+                                overnight = arrival.date() > departure.date()
+
+                            flight = FlightOption(
+                                flight_id=flight_id,
+                                origin=origin,
+                                dest=dest,
+                                departure=departure,
+                                arrival=arrival,
+                                duration_seconds=duration_seconds,
+                                price_usd_cents=price_cents,
+                                overnight=overnight,
+                                provenance=Provenance(
+                                    source="rag",
+                                    ref_id=f"rag:flight:{choice.option_ref}",
+                                    source_url="rag://flights",
+                                    fetched_at=datetime.now(UTC),
+                                    cache_hit=False,
+                                    response_digest=None,
+                                ),
+                            )
+
+                        elif matching_flight:
+                            # Use fixture flight data
+                            flight = matching_flight
+                            flight.provenance.source = "fixture"
+                            
+                        else:
+                            # Fallback: create basic flight from choice features
+                            flight = FlightOption(
+                                flight_id=f"Fallback {choice.option_ref}",
+                                origin=state.intent.airports[0] if state.intent.airports else "JFK",
+                                dest="GIG",  # Default destination
+                                departure=datetime.combine(day_plan.date, slot.window.start, tzinfo=UTC),
+                                arrival=datetime.combine(day_plan.date, slot.window.start, tzinfo=UTC) + timedelta(seconds=choice.features.travel_seconds),
+                                duration_seconds=choice.features.travel_seconds,
+                                price_usd_cents=choice.features.cost_usd_cents,
+                                overnight=False,
+                                provenance=Provenance(
+                                    source="fallback",
+                                    ref_id=f"fallback:flight:{choice.option_ref}",
+                                    source_url="fallback://flights",
+                                    fetched_at=datetime.now(UTC),
+                                    cache_hit=False,
+                                    response_digest=None,
+                                ),
+                            )
+
+                        # Compute and set response digest
+                        flight_data = flight.model_dump(mode="json")
+                        flight.provenance.response_digest = compute_response_digest(flight_data)
+
+                        state.flights[choice.option_ref] = flight
+                        flight_count += 1
+
+    except Exception as e:
+        # Log error but don't fail the entire tool execution
+        print(f"Warning: Error processing flights: {e}")
+        state.messages.append(f"Warning: Flight processing encountered an error: {e}")
+
+    state.tool_call_counts["flights"] = flight_count
 
     # Fetch real lodging data using adapter with budget-aware selection
     from backend.app.adapters.lodging import get_lodging

@@ -131,7 +131,7 @@ def _generate_fixture_flights(
         # Price based on tier with realistic ranges
         base_price = 50000  # $500 base
         if tier == "budget":
-            price = base_price + (idx * 2000)  # $500-510
+            price = 20  # $500-510
         elif tier == "mid":
             price = int(base_price * 1.5) + (idx * 3000)  # $750-765  
         else:  # premium
