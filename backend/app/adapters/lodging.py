@@ -17,21 +17,39 @@ def get_lodging(
     checkin: date,
     checkout: date,
     tier_prefs: list[Tier] | None = None,
+    budget_usd_cents: int | None = None,
 ) -> list[Lodging]:
     """
-    Get lodging options from fixture data.
+    Get lodging options from fixture data with budget-aware tier selection.
 
     Args:
         city: City name
         checkin: Check-in date
         checkout: Check-out date
         tier_prefs: Preferred tiers (budget, mid, luxury)
+        budget_usd_cents: Total trip budget for tier selection
 
     Returns:
         List of Lodging objects with provenance (≤4 options)
     """
+    # Determine tier preferences based on budget if not provided
     if tier_prefs is None:
-        tier_prefs = [Tier.budget, Tier.mid, Tier.luxury]
+        if budget_usd_cents:
+            # Calculate trip duration and budget per night
+            nights = max((checkout - checkin).days, 1)
+            trip_days = max(nights, 1)
+            budget_per_day = budget_usd_cents / trip_days
+            
+            if budget_per_day < 15000:  # Less than $150/day total budget
+                tier_prefs = [Tier.budget]  # Only budget lodging
+            elif budget_per_day < 30000:  # Less than $300/day total budget
+                tier_prefs = [Tier.budget, Tier.mid]  # Budget + mid-tier
+            elif budget_per_day < 60000:  # Less than $600/day total budget
+                tier_prefs = [Tier.mid, Tier.luxury]  # Mid + luxury tiers
+            else:  # $600+ per day
+                tier_prefs = [Tier.luxury]  # Only luxury for very generous budgets
+        else:
+            tier_prefs = [Tier.budget, Tier.mid, Tier.luxury]
 
     # Generate fixture lodging for the city
     all_lodging = _generate_fixture_lodging(city)

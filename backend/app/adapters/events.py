@@ -11,14 +11,16 @@ def get_attractions(
     city: str,
     themes: list[str] | None = None,
     kid_friendly: bool = False,
+    budget_usd_cents: int | None = None,
 ) -> list[Attraction]:
     """
-    Get attraction options from fixture data.
+    Get attraction options from fixture data with budget-aware filtering.
 
     Args:
         city: City name
         themes: Desired themes (art, food, outdoor, etc.)
         kid_friendly: Whether to filter for kid-friendly venues
+        budget_usd_cents: Total trip budget for price-aware selection
 
     Returns:
         List of Attraction objects with provenance (≤20 matches)
@@ -31,11 +33,30 @@ def get_attractions(
 
     # Filter by themes if specified
     if themes:
-        filtered = [
-            a
-            for a in all_attractions
-            if any(theme in a.name.lower() for theme in themes)
-        ]
+        filtered = []
+        for a in all_attractions:
+            # Check if attraction matches any theme
+            attraction_matches = False
+            attraction_name_lower = a.name.lower()
+            venue_type_lower = a.venue_type.lower()
+            
+            for theme in themes:
+                theme_lower = theme.lower()
+                # Match based on name, venue type, or semantic matching
+                if (theme_lower in attraction_name_lower or 
+                    theme_lower in venue_type_lower or
+                    # Semantic theme matching
+                    (theme_lower in ["art", "culture"] and venue_type_lower in ["museum", "temple"]) or
+                    (theme_lower in ["outdoor", "nature"] and venue_type_lower == "park") or
+                    (theme_lower == "food" and "food" in attraction_name_lower) or
+                    (theme_lower in ["history", "culture"] and venue_type_lower in ["temple", "museum"]) or
+                    (theme_lower == "entertainment" and venue_type_lower in ["other"] and any(word in attraction_name_lower for word in ["theater", "opera", "concert"]))
+                ):
+                    attraction_matches = True
+                    break
+            
+            if attraction_matches:
+                filtered.append(a)
     else:
         filtered = all_attractions
 
@@ -43,7 +64,31 @@ def get_attractions(
     if kid_friendly:
         filtered = [a for a in filtered if a.kid_friendly is True]
 
+    # Budget-aware filtering: prioritize free and low-cost attractions for tight budgets
+    if budget_usd_cents:
+        trip_days = 5  # Reasonable default if we don't know exact dates
+        budget_per_day = budget_usd_cents / trip_days
+        
+        if budget_per_day < 15000:  # Less than $150/day - very tight budget
+            # Prioritize free attractions (price None or 0) and very cheap ones (<$20)
+            filtered = sorted(filtered, key=lambda a: (
+                a.est_price_usd_cents or 0,  # Free attractions first (None -> 0)
+                a.name  # Then alphabetical
+            ))
+            # Filter out expensive attractions (>$20)
+            filtered = [a for a in filtered if (a.est_price_usd_cents or 0) <= 2000]
+        elif budget_per_day < 30000:  # $150-300/day - moderate budget
+            # Mix of free and reasonably priced attractions (<$50)
+            filtered = sorted(filtered, key=lambda a: (
+                a.est_price_usd_cents or 0,
+                a.name
+            ))
+            # Filter out very expensive attractions (>$50)
+            filtered = [a for a in filtered if (a.est_price_usd_cents or 0) <= 5000]
+        # For generous budgets ($300+/day), include all attractions without filtering
+
     # Return up to 20 matches
+    return filtered[:20]
     return filtered[:20]
 
 

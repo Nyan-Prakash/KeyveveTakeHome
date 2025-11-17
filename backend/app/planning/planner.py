@@ -428,7 +428,32 @@ def _create_activity_choice(
     if intent.prefs.themes:
         themes = intent.prefs.themes[:2]  # Use first 2 user themes
 
-    # Adjust cost based on variant and add some randomness
+    # Budget-aware activity type and cost selection
+    trip_days = max((intent.date_window.end - intent.date_window.start).days, 1)
+    budget_per_day = intent.budget_usd_cents / trip_days
+    
+    # Adjust both activity cost and type based on budget constraints
+    if budget_per_day < 15000:  # Very tight budget (<$150/day)
+        # Prioritize free or very cheap activities
+        if period != "evening":  # For attractions
+            base_cost = rng.choice([0, 500, 1000])  # Free to $10
+            themes = ["park", "outdoor", "walking"] if "outdoor" in intent.prefs.themes or not intent.prefs.themes else themes
+        else:  # For meals
+            base_cost = 1500  # $15 meals
+    elif budget_per_day < 30000:  # Moderate budget ($150-300/day)
+        # Mix of free and reasonably priced activities
+        if period != "evening":
+            base_cost = rng.choice([1000, 2000, 3000])  # $10-30
+        else:
+            base_cost = 2500  # $25 meals
+    else:  # Generous budget ($300+/day)
+        # Can afford premium activities
+        if period != "evening":
+            base_cost = rng.choice([3000, 5000, 7000])  # $30-70
+        else:
+            base_cost = 4000  # $40+ meals
+
+    # Apply cost multiplier and add randomness
     final_cost = int(base_cost * cost_multiplier * rng.uniform(0.8, 1.2))
 
     # Determine indoor/outdoor based on variant and randomness
@@ -451,6 +476,6 @@ def _create_activity_choice(
         score=rng.uniform(0.6, 0.9),
         provenance=Provenance(
             source="planner",
-            fetched_at=datetime.now(),
+            fetched_at=datetime.now(UTC),
         ),
     )

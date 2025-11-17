@@ -466,15 +466,28 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
         state.flights[flight.flight_id] = flight
     state.tool_call_counts["flights"] = len(flight_options)
 
-    # Fetch real lodging data using adapter
+    # Fetch real lodging data using adapter with budget-aware selection
     from backend.app.adapters.lodging import get_lodging
     from backend.app.models.common import Tier
+
+    # Calculate budget per day for lodging tier selection
+    trip_days = max((state.intent.date_window.end - state.intent.date_window.start).days, 1)
+    budget_per_day = state.intent.budget_usd_cents / trip_days
+    
+    # Determine tier preferences based on budget
+    if budget_per_day < 15000:  # Less than $150/day
+        tier_prefs = [Tier.budget]
+    elif budget_per_day < 30000:  # Less than $300/day  
+        tier_prefs = [Tier.budget, Tier.mid]
+    else:  # $300+ per day
+        tier_prefs = [Tier.budget, Tier.mid, Tier.luxury]
 
     lodging_options = get_lodging(
         city=state.intent.city,
         checkin=state.intent.date_window.start,
         checkout=state.intent.date_window.end,
-        tier_prefs=[Tier.budget, Tier.mid, Tier.luxury],
+        tier_prefs=tier_prefs,
+        budget_usd_cents=state.intent.budget_usd_cents,
     )
 
     # Extract lodging info from RAG chunks to enrich with real names
