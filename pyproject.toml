@@ -44,6 +44,14 @@ dependencies = [
     "sse-starlette>=2.1.0",
     # Chat interface
     "openai>=1.0.0",
+    # PR13: MCP Integration
+    "httpx>=0.27.0",  # Already included, but ensuring MCP client support
+    # PR14: Authentication & Security
+    "argon2-cffi>=23.1.0",      # Password hashing
+    "pyjwt[crypto]>=2.8.0",     # JWT with RSA support
+    "cryptography>=41.0.0",     # RSA key handling
+    "python-multipart>=0.0.6",  # Form data parsing
+    "email-validator>=2.0.0",   # Email validation for Pydantic
 ]
 
 [project.optional-dependencies]

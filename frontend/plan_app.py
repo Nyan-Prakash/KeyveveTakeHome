@@ -5,10 +5,14 @@ from datetime import date
 
 import httpx
 import streamlit as st
+from auth import auth
 
 # Configuration
 API_BASE_URL = "http://localhost:8000"
-BEARER_TOKEN = "test-token"  # Stub token for PR4
+
+# Require authentication
+auth.require_auth()
+# Removed hardcoded token
 
 
 def main():
@@ -81,7 +85,7 @@ def main():
                 response = httpx.post(
                     f"{API_BASE_URL}/plan",
                     json=intent,
-                    headers={"Authorization": f"Bearer {BEARER_TOKEN}"},
+                    headers=auth.get_auth_headers(),
                     timeout=10.0,
                 )
                 response.raise_for_status()
@@ -98,7 +102,7 @@ def main():
                 with httpx.stream(
                     "GET",
                     f"{API_BASE_URL}/plan/{run_id}/stream",
-                    headers={"Authorization": f"Bearer {BEARER_TOKEN}"},
+                    headers=auth.get_auth_headers(),
                     timeout=60.0,
                 ) as stream_response:
                     stream_response.raise_for_status()
@@ -149,7 +153,7 @@ def main():
                 try:
                     itinerary_response = httpx.get(
                         f"{API_BASE_URL}/plan/{run_id}",
-                        headers={"Authorization": f"Bearer {BEARER_TOKEN}"},
+                        headers=auth.get_auth_headers(),
                         timeout=10.0,
                     )
                     itinerary_response.raise_for_status()

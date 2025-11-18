@@ -40,7 +40,7 @@ class TestPR6HappyPath:
 
         # All plans should be valid
         for plan in candidate_plans:
-            assert 4 <= len(plan.days) <= 7  # Valid day count
+            assert len(plan.days) >= 1  # Must have at least one day
             assert plan.rng_seed is not None  # Has seed for determinism
 
             # All days should have valid slots

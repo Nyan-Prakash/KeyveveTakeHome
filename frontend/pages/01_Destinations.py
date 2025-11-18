@@ -2,32 +2,61 @@
 
 import httpx
 import streamlit as st
+from auth import auth
 
 # Configuration
 API_BASE_URL = "http://localhost:8000"
-BEARER_TOKEN = "test-token"
 
+# Require authentication
+auth.require_auth()
 
 def main():
     """Destinations management page."""
-    st.title("Destinations")
+    # Show auth status in sidebar
+    auth.show_auth_sidebar()
+    
+    st.title("📍 Destinations")
     st.markdown("Manage your travel destinations and view planning history")
 
     # Search bar
     search = st.text_input("🔍 Search destinations", placeholder="City or country name")
 
-    # Fetch destinations
+    # Fetch destinations using authenticated headers
     try:
         params = {}
         if search:
             params["search"] = search
 
+        # First attempt
+        headers = auth.get_auth_headers()
+        if not headers:
+            st.error("❌ Not authenticated. Please log in again.")
+            st.stop()
+            
         response = httpx.get(
             f"{API_BASE_URL}/destinations",
-            headers={"Authorization": f"Bearer {BEARER_TOKEN}"},
+            headers=headers,
             params=params,
             timeout=10.0,
         )
+        
+        # If unauthorized, validate session and retry once
+        if response.status_code == 401:
+            st.warning("🔄 Session expired, refreshing...")
+            if auth.validate_current_session():
+                # Retry with fresh headers
+                headers = auth.get_auth_headers()
+                response = httpx.get(
+                    f"{API_BASE_URL}/destinations",
+                    headers=headers,
+                    params=params,
+                    timeout=10.0,
+                )
+            else:
+                st.error("❌ Authentication failed. Please log in again.")
+                auth.logout()
+                st.stop()
+        
         response.raise_for_status()
         destinations = response.json()
 
@@ -82,9 +111,7 @@ def main():
                                 try:
                                     del_response = httpx.delete(
                                         f"{API_BASE_URL}/destinations/{dest['dest_id']}",
-                                        headers={
-                                            "Authorization": f"Bearer {BEARER_TOKEN}"
-                                        },
+                                        headers=auth.get_auth_headers(),
                                         timeout=10.0,
                                     )
                                     del_response.raise_for_status()
@@ -166,7 +193,7 @@ def main():
                         response = httpx.patch(
                             f"{API_BASE_URL}/destinations/{editing_dest['dest_id']}",
                             json=payload,
-                            headers={"Authorization": f"Bearer {BEARER_TOKEN}"},
+                            headers=auth.get_auth_headers(),
                             timeout=10.0,
                         )
                     else:
@@ -174,7 +201,7 @@ def main():
                         response = httpx.post(
                             f"{API_BASE_URL}/destinations",
                             json=payload,
-                            headers={"Authorization": f"Bearer {BEARER_TOKEN}"},
+                            headers=auth.get_auth_headers(),
                             timeout=10.0,
                         )
 

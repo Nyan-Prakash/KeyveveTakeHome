@@ -2,14 +2,20 @@
 
 import httpx
 import streamlit as st
+from auth import auth
 
 # Configuration
 API_BASE_URL = "http://localhost:8000"
-BEARER_TOKEN = "test-token"
+
+# Require authentication
+auth.require_auth()
 
 
 def main():
     """Knowledge Base management page."""
+    # Show auth status in sidebar
+    auth.show_auth_sidebar()
+    
     st.title("Knowledge Base")
     st.markdown("Upload and manage documents for RAG-enhanced planning")
 
@@ -17,7 +23,7 @@ def main():
     try:
         response = httpx.get(
             f"{API_BASE_URL}/destinations",
-            headers={"Authorization": f"Bearer {BEARER_TOKEN}"},
+            headers=auth.get_auth_headers(),
             timeout=10.0,
         )
         response.raise_for_status()
@@ -58,9 +64,15 @@ def main():
                 with st.spinner("Uploading and processing document..."):
                     try:
                         files = {"file": (uploaded_file.name, uploaded_file.getvalue())}
+                        
+                        # Get auth headers but remove Content-Type for file upload
+                        headers = auth.get_auth_headers()
+                        if "Content-Type" in headers:
+                            del headers["Content-Type"]
+                            
                         upload_response = httpx.post(
                             f"{API_BASE_URL}/destinations/{dest_id}/knowledge/upload",
-                            headers={"Authorization": f"Bearer {BEARER_TOKEN}"},
+                            headers=headers,
                             files=files,
                             timeout=30.0,
                         )
@@ -90,7 +102,7 @@ def main():
         try:
             items_response = httpx.get(
                 f"{API_BASE_URL}/destinations/{dest_id}/knowledge/items",
-                headers={"Authorization": f"Bearer {BEARER_TOKEN}"},
+                headers=auth.get_auth_headers(),
                 timeout=10.0,
             )
             items_response.raise_for_status()
@@ -122,7 +134,7 @@ def main():
         try:
             chunks_response = httpx.get(
                 f"{API_BASE_URL}/destinations/{dest_id}/knowledge/chunks",
-                headers={"Authorization": f"Bearer {BEARER_TOKEN}"},
+                headers=auth.get_auth_headers(),
                 timeout=10.0,
             )
             chunks_response.raise_for_status()

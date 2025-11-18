@@ -10,9 +10,27 @@ from backend.app.models import (
     Choice,
     ChoiceFeatures,
     ChoiceKind,
-    DateWindow,
-    DayPlan,
-    IntentV1,
+    DateWin    def test_minimal_day_count_passes(self):
+        """Plan with 1 day should pass validation."""
+        assumptions = Assumptions(
+            fx_rate_usd_eur=1.1,
+            daily_spend_est_cents=5000,
+        )
+
+        # Test with 1 day
+        days = [
+            self._create_minimal_day_plan(date(2025, 6, 1))
+        ]
+
+        try:
+            plan = PlanV1(
+                days=days,
+                assumptions=assumptions,
+                rng_seed=42,
+            )
+            assert len(plan.days) == 1
+        except ValidationError:
+            pytest.fail("Single day plan should not raise ValidationError")    IntentV1,
     PlanV1,
     Preferences,
     Provenance,
@@ -236,58 +254,67 @@ class TestPlanV1Validation:
         return DayPlan(date=day_date, slots=[slot])
 
     def test_valid_day_count_passes(self):
-        """Plan with 4-7 days should pass validation."""
+        """Plan with any number of days should pass validation."""
         assumptions = Assumptions(
             fx_rate_usd_eur=1.1,
             daily_spend_est_cents=5000,
         )
 
-        # Test with 5 days (within range)
+        # Test with 5 days
         days = [
             self._create_minimal_day_plan(date(2025, 6, day)) for day in range(1, 6)
         ]
 
-        plan = PlanV1(
-            days=days,
-            assumptions=assumptions,
-            rng_seed=42,
-        )
-        assert len(plan.days) == 5
+        try:
+            plan = PlanV1(
+                days=days,
+                assumptions=assumptions,
+                rng_seed=42,
+            )
+            assert len(plan.days) == 5
+        except ValidationError:
+            pytest.fail("Valid plan should not raise ValidationError")
 
-    def test_too_few_days_fails(self):
-        """Plan with less than 4 days should fail validation."""
+    def test_short_trip_passes(self):
+        """Plan with few days should pass validation."""
         assumptions = Assumptions(
             fx_rate_usd_eur=1.1,
             daily_spend_est_cents=5000,
         )
 
-        # Test with 3 days (too few)
+        # Test with 2 days
         days = [
-            self._create_minimal_day_plan(date(2025, 6, day)) for day in range(1, 4)
+            self._create_minimal_day_plan(date(2025, 6, day)) for day in range(1, 3)
         ]
 
-        with pytest.raises(ValidationError, match="Plan must have 4-7 days"):
-            PlanV1(
+        try:
+            plan = PlanV1(
                 days=days,
                 assumptions=assumptions,
                 rng_seed=42,
             )
+            assert len(plan.days) == 2
+        except ValidationError:
+            pytest.fail("Short plan should not raise ValidationError")
 
-    def test_too_many_days_fails(self):
-        """Plan with more than 7 days should fail validation."""
+    def test_many_days_passes(self):
+        """Plan with many days should pass validation."""
         assumptions = Assumptions(
             fx_rate_usd_eur=1.1,
             daily_spend_est_cents=5000,
         )
 
-        # Test with 8 days (too many)
+        # Test with 10 days
         days = [
-            self._create_minimal_day_plan(date(2025, 6, day)) for day in range(1, 9)
+            self._create_minimal_day_plan(date(2025, 6, day)) for day in range(1, 11)
         ]
 
-        with pytest.raises(ValidationError, match="Plan must have 4-7 days"):
-            PlanV1(
+        try:
+            plan = PlanV1(
                 days=days,
                 assumptions=assumptions,
                 rng_seed=42,
             )
+            assert len(plan.days) == 10
+        except ValidationError:
+            pytest.fail("Extended plan should not raise ValidationError")

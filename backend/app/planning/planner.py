@@ -46,8 +46,7 @@ def build_candidate_plans(intent: IntentV1) -> Sequence[PlanV1]:
     end_date = intent.date_window.end
     trip_days = (end_date - start_date).days
 
-    # Ensure we stay within 4-7 day bounds
-    trip_days = max(4, min(7, trip_days))
+    # Use the actual trip duration requested
 
     # Generate up to 4 different plan variants
     plans: list[PlanV1] = []

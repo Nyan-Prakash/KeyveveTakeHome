@@ -6,10 +6,13 @@ from typing import Any
 
 import httpx
 import streamlit as st
+from auth import auth
 
 # Configuration
 API_BASE_URL = "http://localhost:8000"
-BEARER_TOKEN = "test-token"
+
+# Require authentication
+auth.require_auth()
 
 
 def render_itinerary(itinerary_data: dict[str, Any]) -> None:
@@ -255,9 +258,13 @@ def poll_itinerary(run_id: str) -> dict[str, Any] | None:
 
     while attempt < max_attempts:
         try:
+            headers = auth.get_auth_headers()
+            if not headers:
+                return None
+                
             response = httpx.get(
                 f"{API_BASE_URL}/plan/{run_id}",
-                headers={"Authorization": f"Bearer {BEARER_TOKEN}"},
+                headers=headers,
                 timeout=10.0,
             )
             response.raise_for_status()
@@ -300,6 +307,11 @@ def send_chat_message(user_message: str) -> None:
 
     # Call chat API
     try:
+        headers = auth.get_auth_headers()
+        if not headers:
+            st.error("❌ Not authenticated. Please log in again.")
+            return
+            
         response = httpx.post(
             f"{API_BASE_URL}/chat",
             json={
@@ -307,9 +319,30 @@ def send_chat_message(user_message: str) -> None:
                 "conversation_history": conversation_history,
                 "run_id": st.session_state.chat_run_id,
             },
-            headers={"Authorization": f"Bearer {BEARER_TOKEN}"},
+            headers=headers,
             timeout=30.0,
         )
+        
+        # If unauthorized, validate session and retry once  
+        if response.status_code == 401:
+            st.warning("🔄 Session expired, refreshing...")
+            if auth.validate_current_session():
+                headers = auth.get_auth_headers()
+                response = httpx.post(
+                    f"{API_BASE_URL}/chat",
+                    json={
+                        "message": user_message,
+                        "conversation_history": conversation_history,
+                        "run_id": st.session_state.chat_run_id,
+                    },
+                    headers=headers,
+                    timeout=30.0,
+                )
+            else:
+                st.error("❌ Authentication failed. Please log in again.")
+                auth.logout()
+                return
+        
         response.raise_for_status()
         result = response.json()
 
@@ -334,6 +367,9 @@ def send_chat_message(user_message: str) -> None:
 
 def main():
     """Chat-based travel planning page."""
+    # Show auth status in sidebar
+    auth.show_auth_sidebar()
+    
     st.title("💬 Chat Travel Planner")
     st.markdown("Plan your trip through conversation!")
 

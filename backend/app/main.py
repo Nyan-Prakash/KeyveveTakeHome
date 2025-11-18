@@ -5,12 +5,14 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.app.api.auth import router as auth_router
 from backend.app.api.chat import router as chat_router
 from backend.app.api.destinations import router as destinations_router
 from backend.app.api.health import get_health
 from backend.app.api.knowledge import router as knowledge_router
 from backend.app.api.plan import router as plan_router
 from backend.app.config import get_settings
+from backend.app.security.middleware import SecurityHeadersMiddleware, RateLimitMiddleware
 
 
 def create_app() -> FastAPI:
@@ -26,6 +28,10 @@ def create_app() -> FastAPI:
         description="Agentic AI Travel Advisor - Backend API",
         version="0.1.0",
     )
+
+    # Security middleware (before CORS)
+    app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(RateLimitMiddleware)
 
     # CORS middleware
     app.add_middleware(
@@ -44,10 +50,13 @@ def create_app() -> FastAPI:
         return result.model_dump()
 
     # Include routers
+    app.include_router(auth_router)
     app.include_router(chat_router)
     app.include_router(destinations_router)
     app.include_router(knowledge_router)
     app.include_router(plan_router)
+
+    return app
 
     return app
 

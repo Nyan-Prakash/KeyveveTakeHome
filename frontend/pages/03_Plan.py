@@ -5,10 +5,13 @@ from datetime import date
 
 import httpx
 import streamlit as st
+from auth import auth
 
 # Configuration
 API_BASE_URL = "http://localhost:8000"
-BEARER_TOKEN = "test-token"
+
+# Require authentication
+auth.require_auth()
 
 
 def render_right_rail(itinerary_data: dict) -> None:
@@ -81,6 +84,9 @@ def render_right_rail(itinerary_data: dict) -> None:
 
 def main():
     """Plan page with destination-awareness and what-if flows."""
+    # Show auth status in sidebar
+    auth.show_auth_sidebar()
+    
     st.title("Travel Planner")
     st.markdown("Generate and refine AI-powered travel itineraries")
 
@@ -88,7 +94,7 @@ def main():
     try:
         response = httpx.get(
             f"{API_BASE_URL}/destinations",
-            headers={"Authorization": f"Bearer {BEARER_TOKEN}"},
+            headers=auth.get_auth_headers(),
             timeout=10.0,
         )
         response.raise_for_status()
@@ -154,7 +160,7 @@ def main():
                         edit_response = httpx.post(
                             f"{API_BASE_URL}/plan/{active_run_id}/edit",
                             json={"delta_budget_usd_cents": budget_change * 100},
-                            headers={"Authorization": f"Bearer {BEARER_TOKEN}"},
+                            headers=auth.get_auth_headers(),
                             timeout=10.0,
                         )
                         edit_response.raise_for_status()
@@ -185,7 +191,7 @@ def main():
                         edit_response = httpx.post(
                             f"{API_BASE_URL}/plan/{active_run_id}/edit",
                             json={"shift_dates_days": date_shift},
-                            headers={"Authorization": f"Bearer {BEARER_TOKEN}"},
+                            headers=auth.get_auth_headers(),
                             timeout=10.0,
                         )
                         edit_response.raise_for_status()
@@ -209,7 +215,7 @@ def main():
                         edit_response = httpx.post(
                             f"{API_BASE_URL}/plan/{active_run_id}/edit",
                             json={"delta_budget_usd_cents": -30000},
-                            headers={"Authorization": f"Bearer {BEARER_TOKEN}"},
+                            headers=auth.get_auth_headers(),
                             timeout=10.0,
                         )
                         edit_response.raise_for_status()
@@ -225,7 +231,7 @@ def main():
                         edit_response = httpx.post(
                             f"{API_BASE_URL}/plan/{active_run_id}/edit",
                             json={"new_prefs": {"kid_friendly": True}},
-                            headers={"Authorization": f"Bearer {BEARER_TOKEN}"},
+                            headers=auth.get_auth_headers(),
                             timeout=10.0,
                         )
                         edit_response.raise_for_status()
@@ -241,7 +247,7 @@ def main():
                         edit_response = httpx.post(
                             f"{API_BASE_URL}/plan/{active_run_id}/edit",
                             json={"shift_dates_days": 1},
-                            headers={"Authorization": f"Bearer {BEARER_TOKEN}"},
+                            headers=auth.get_auth_headers(),
                             timeout=10.0,
                         )
                         edit_response.raise_for_status()
@@ -255,7 +261,7 @@ def main():
         try:
             itinerary_response = httpx.get(
                 f"{API_BASE_URL}/plan/{active_run_id}",
-                headers={"Authorization": f"Bearer {BEARER_TOKEN}"},
+                headers=auth.get_auth_headers(),
                 timeout=10.0,
             )
             itinerary_response.raise_for_status()
@@ -397,7 +403,7 @@ def main():
                     response = httpx.post(
                         f"{API_BASE_URL}/plan",
                         json=intent,
-                        headers={"Authorization": f"Bearer {BEARER_TOKEN}"},
+                        headers=auth.get_auth_headers(),
                         timeout=10.0,
                     )
                     response.raise_for_status()

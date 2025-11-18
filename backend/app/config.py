@@ -54,6 +54,46 @@ class Settings(BaseSettings):
         default="gpt-4-turbo-preview", description="OpenAI model for chat"
     )
 
+    # MCP Configuration
+    mcp_weather_endpoint: str = Field(
+        default="http://localhost:3001",
+        description="MCP weather server endpoint",
+    )
+    mcp_enabled: bool = Field(
+        default=True,
+        description="Enable MCP integration with fallback to direct APIs",
+    )
+    mcp_timeout: float = Field(
+        default=3.0,
+        description="MCP request timeout in seconds",
+    )
+
+    # JWT Security Configuration
+    jwt_access_ttl_minutes: int = Field(
+        default=15,
+        description="JWT access token TTL in minutes",
+    )
+    jwt_refresh_ttl_days: int = Field(
+        default=7,
+        description="JWT refresh token TTL in days",
+    )
+
+    # Password Security
+    password_min_length: int = Field(
+        default=8,
+        description="Minimum password length",
+    )
+
+    # Account Lockout
+    lockout_threshold: int = Field(
+        default=5,
+        description="Failed login attempts before lockout",
+    )
+    lockout_duration_minutes: int = Field(
+        default=5,
+        description="Account lockout duration in minutes",
+    )
+
     # Performance Settings
     fanout_cap: int = Field(default=4, description="Max concurrent branches in planner")
     airport_buffer_min: int = Field(

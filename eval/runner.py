@@ -65,7 +65,6 @@ def create_stub_itinerary(intent: IntentV1, scenario_id: str) -> ItineraryV1:
     """Create a minimal stub itinerary for testing."""
     # Calculate trip length
     trip_days = (intent.date_window.end - intent.date_window.start).days + 1
-    trip_days = min(max(trip_days, 4), 7)  # Clamp to 4-7 days
 
     # Create stub activities
     days = []

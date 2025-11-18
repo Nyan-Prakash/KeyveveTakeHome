@@ -1,0 +1,29 @@
+# Frontend-specific ignores
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Backend files (not needed in frontend image)
+backend/
+alembic/
+tests/
+eval/
+mcp-server/
+*.md

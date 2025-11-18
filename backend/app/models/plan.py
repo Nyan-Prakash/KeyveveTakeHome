@@ -95,7 +95,5 @@ class PlanV1(BaseModel):
     @field_validator("days")
     @classmethod
     def validate_day_count(cls, v: list[DayPlan]) -> list[DayPlan]:
-        """Ensure day count is between 4-7."""
-        if not (4 <= len(v) <= 7):
-            raise ValueError("Plan must have 4-7 days")
+        """Validate the days list."""
         return v
