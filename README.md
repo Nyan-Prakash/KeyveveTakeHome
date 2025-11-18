@@ -445,11 +445,3 @@ pre-commit install
 # Manual run
 pre-commit run --all-files
 ```
-
-## 📝 License
-
-MIT License - see LICENSE file for details.
-
----
-
-**Built with ❤️ for intelligent travel planning**
