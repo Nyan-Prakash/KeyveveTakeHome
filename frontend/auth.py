@@ -4,6 +4,7 @@ import streamlit as st
 import requests
 from typing import Optional, Dict, Any
 import json
+import streamlit.components.v1 as components
 
 
 class AuthManager:
@@ -21,16 +22,40 @@ class AuthManager:
             st.session_state.refresh_token = None  
         if "current_user" not in st.session_state:
             st.session_state.current_user = None
+        if "auth_checked" not in st.session_state:
+            st.session_state.auth_checked = False
+            st.session_state.auth_checked = False
     
     @property
     def is_authenticated(self) -> bool:
         """Check if user is currently authenticated."""
         return "access_token" in st.session_state and st.session_state.access_token is not None
     
-    @property
+    @property 
     def current_user(self) -> Optional[Dict[str, Any]]:
         """Get current user information."""
         return st.session_state.get("current_user")
+        
+    def restore_session_if_needed(self):
+        """Attempt to restore session by checking stored tokens."""
+        # Ensure session is initialized first
+        self._ensure_session_initialized()
+        
+        # If we don't have a token but haven't checked for stored ones yet
+        if not self.is_authenticated and not st.session_state.auth_checked:
+            st.session_state.auth_checked = True
+            
+            # Try to load token from browser storage
+            stored_token = self._load_token_from_storage()
+            if stored_token:
+                st.session_state.access_token = stored_token
+                self._fetch_user_info()
+                if self.is_authenticated:
+                    st.rerun()
+        
+        # If we have a token but no user info, try to fetch it
+        elif self.is_authenticated and not st.session_state.current_user:
+            self._fetch_user_info()
     
     def signup(self, email: str, password: str) -> bool:
         """Sign up a new user."""
@@ -98,8 +123,9 @@ class AuthManager:
         except:
             pass  # Ignore errors on logout
         
-        # Clear session state
+        # Clear session state and browser storage
         self._clear_auth_state()
+        self._clear_token_from_storage()
         st.success("Logged out successfully!")
         st.rerun()
     
@@ -152,13 +178,14 @@ class AuthManager:
             return False
     
     def _save_tokens(self, data: Dict[str, Any]):
-        """Save authentication tokens to session state."""
+        """Save authentication tokens to session state and browser storage."""
         st.session_state.access_token = data.get("access_token")
         st.session_state.refresh_token = data.get("refresh_token")
         
-        # Debug: Print token info
+        # Save to browser storage for persistence
         token = st.session_state.access_token
         if token:
+            self._save_token_to_storage(token)
             print(f"✅ Token saved: {token[:50]}...")
         else:
             print("❌ No token in response")
@@ -188,15 +215,25 @@ class AuthManager:
     
     def _clear_auth_state(self):
         """Clear authentication state without showing success message."""
-        keys_to_clear = ["access_token", "refresh_token", "current_user"]
+        keys_to_clear = ["access_token", "refresh_token", "current_user", "auth_checked"]
         for key in keys_to_clear:
             if key in st.session_state:
                 del st.session_state[key]
     
     def require_auth(self):
         """Decorator/function to require authentication for a page."""
+        # First try to restore session
+        self.restore_session_if_needed()
+        
         if not self.is_authenticated:
             st.warning("🔐 Please log in to access this page")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🔑 Go to Login", use_container_width=True):
+                    st.switch_page("pages/00_Login.py")
+            with col2:
+                if st.button("📝 Go to Sign Up", use_container_width=True):
+                    st.switch_page("pages/00_Signup.py")
             st.stop()
     
     def show_auth_sidebar(self):
@@ -210,18 +247,66 @@ class AuthManager:
                     st.success(f"👋 Welcome, {user.get('email', 'User')}!")
                     st.write(f"**User ID:** {user.get('user_id', 'Unknown')}")
                     st.write(f"**Org ID:** {user.get('org_id', 'Unknown')}")
+                else:
+                    st.success("👋 Welcome! You are logged in.")
                 
-                if st.button("🚪 Logout", use_container_width=True):
+                # Logout button
+                st.divider()
+                if st.button("🚪 Logout", use_container_width=True, type="secondary", key="sidebar_logout_btn"):
                     self.logout()
             else:
                 st.warning("🔐 Not logged in")
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("🔑 Login", use_container_width=True):
+                    if st.button("🔑 Login", use_container_width=True, key="sidebar_login_btn"):
                         st.switch_page("pages/00_Login.py")
                 with col2:
-                    if st.button("📝 Sign Up", use_container_width=True):
+                    if st.button("� Sign Up", use_container_width=True, key="sidebar_signup_btn"):
                         st.switch_page("pages/00_Signup.py")
+                        
+    def show_logout_button(self, key: str = "logout_main"):
+        """Show a standalone logout button."""
+        if self.is_authenticated:
+            if st.button("🚪 Logout", key=key, type="secondary"):
+                self.logout()
+    
+    def _save_token_to_storage(self, token: str):
+        """Save token to browser storage using a simple component."""
+        if token:
+            components.html(f"""
+            <script>
+                localStorage.setItem('keyveve_auth_token', '{token}');
+                sessionStorage.setItem('keyveve_auth_token', '{token}');
+            </script>
+            """, height=0)
+            
+    def _load_token_from_storage(self):
+        """Load token from browser storage."""
+        result = components.html("""
+        <script>
+            const token = localStorage.getItem('keyveve_auth_token') || sessionStorage.getItem('keyveve_auth_token');
+            if (token) {
+                // Return the token to Streamlit
+                const returnData = {token: token};
+                if (window.streamlitSetComponentValue) {
+                    window.streamlitSetComponentValue(returnData);
+                }
+            }
+        </script>
+        """, height=0)
+        
+        if result and isinstance(result, dict) and 'token' in result:
+            return result['token']
+        return None
+        
+    def _clear_token_from_storage(self):
+        """Clear token from browser storage."""
+        components.html("""
+        <script>
+            localStorage.removeItem('keyveve_auth_token');
+            sessionStorage.removeItem('keyveve_auth_token');
+        </script>
+        """, height=0)
 
 
 # Global auth manager instance

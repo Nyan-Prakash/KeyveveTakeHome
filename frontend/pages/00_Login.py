@@ -1,6 +1,7 @@
 """Login page for Keyveve Travel Planner."""
 
 import streamlit as st
+import time
 from auth import auth
 
 st.set_page_config(
@@ -9,11 +10,17 @@ st.set_page_config(
     layout="centered",
 )
 
-# If already logged in, redirect to home
+# If already logged in, show navigation options
 if auth.is_authenticated:
     st.success("You are already logged in!")
-    if st.button("Go to Home"):
-        st.switch_page("Home.py")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("💬 Go to Chat Plan", use_container_width=True, type="primary"):
+            st.switch_page("pages/04_Chat_Plan.py")
+    with col2:
+        if st.button("🏠 Go to Home", use_container_width=True):
+            st.switch_page("Home.py")
     st.stop()
 
 st.title("🔑 Login to Keyveve")
@@ -49,10 +56,25 @@ if login_submitted:
     else:
         with st.spinner("Logging in..."):
             if auth.login(email, password):
-                st.success("Login successful! Redirecting...")
+                st.success("Login successful! 🎉")
                 st.balloons()
-                # Small delay to show success message
-                st.rerun()
+                
+                # Show quick navigation options after successful login
+                st.markdown("**Where would you like to go?**")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("💬 Start Planning (Chat)", use_container_width=True, type="primary", key="goto_chat"):
+                        st.switch_page("pages/04_Chat_Plan.py")
+                with col2:
+                    if st.button("🏠 Go to Home", use_container_width=True, key="goto_home"):
+                        st.switch_page("Home.py")
+                
+                # Auto-redirect after 3 seconds if no action
+                with st.empty():
+                    for i in range(3, 0, -1):
+                        st.info(f"Auto-redirecting to Chat Plan in {i} seconds... (or click a button above)")
+                        time.sleep(1)
+                    st.switch_page("pages/04_Chat_Plan.py")
 
 st.divider()
 
@@ -66,5 +88,10 @@ Or create a new account with the Sign Up button above.
 """)
 
 # Navigation back to home
-if st.button("🏠 Back to Home", use_container_width=True):
-    st.switch_page("Home.py")
+col1, col2 = st.columns(2)
+with col1:
+    if st.button("🏠 Back to Home", use_container_width=True):
+        st.switch_page("Home.py")
+with col2:
+    if st.button("💬 Go to Chat Plan", use_container_width=True, type="secondary"):
+        st.switch_page("pages/04_Chat_Plan.py")

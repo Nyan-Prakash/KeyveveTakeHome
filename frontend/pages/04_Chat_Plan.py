@@ -11,9 +11,21 @@ from auth import auth
 # Configuration
 API_BASE_URL = "http://localhost:8000"
 
+# Set page config
+st.set_page_config(
+    page_title="Chat Plan - Keyveve Travel Planner",
+    page_icon="💬",
+    layout="wide",
+)
+
+# Restore session if possible
+auth.restore_session_if_needed()
+
 # Require authentication
 auth.require_auth()
 
+# Show logout button in sidebar
+auth.show_auth_sidebar()
 
 def render_itinerary(itinerary_data: dict[str, Any]) -> None:
     """Render the itinerary in a formatted way."""
@@ -367,9 +379,6 @@ def send_chat_message(user_message: str) -> None:
 
 def main():
     """Chat-based travel planning page."""
-    # Show auth status in sidebar
-    auth.show_auth_sidebar()
-    
     st.title("💬 Chat Travel Planner")
     st.markdown("Plan your trip through conversation!")
 

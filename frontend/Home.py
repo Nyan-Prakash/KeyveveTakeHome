@@ -9,6 +9,9 @@ st.set_page_config(
     layout="wide",
 )
 
+# Restore session if possible
+auth.restore_session_if_needed()
+
 # Show authentication status in sidebar
 auth.show_auth_sidebar()
 
@@ -20,6 +23,8 @@ if auth.is_authenticated:
     user = auth.current_user
     if user:
         st.success(f"🎉 Welcome back, **{user.get('email', 'User')}**!")
+    else:
+        st.success("🎉 Welcome back!")
 else:
     st.info("👋 Welcome! Please log in or sign up to access all features.")
 
