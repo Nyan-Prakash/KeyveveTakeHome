@@ -2,6 +2,12 @@
 
 An intelligent travel planning system that generates personalized 4-7 day itineraries with multi-constraint verification, deterministic repair loops, and real-time streaming updates. Built with FastAPI, LangGraph, Streamlit, and PostgreSQL with pgvector for RAG-enhanced planning.
 
+
+## Video Demo
+
+https://youtu.be/ze_R6Goon_E
+
+
 ## 🏗️ Architecture Overview
 
 This is a production-ready mono-repo implementing an agentic travel planner with the following stack:
