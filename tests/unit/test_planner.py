@@ -4,7 +4,20 @@ from datetime import date, time
 
 from backend.app.models.common import TimeWindow
 from backend.app.models.intent import DateWindow, IntentV1, LockedSlot, Preferences
+from backend.app.models.plan import PlanV1
 from backend.app.planning.planner import build_candidate_plans
+
+
+def _sum_plan_cost(plan: PlanV1) -> int:
+    """Helper to approximate total plan cost for assertions."""
+    total = plan.assumptions.daily_spend_est_cents * len(plan.days)
+
+    for day in plan.days:
+        for slot in day.slots:
+            if slot.choices:
+                total += slot.choices[0].features.cost_usd_cents
+
+    return total
 
 
 class TestPlannerFanOut:
@@ -251,3 +264,28 @@ class TestPlannerVariants:
 
             # At least some plans should differ in daily spend
             assert len(unique_spends) >= 1, "Plans should have varied assumptions"
+
+    def test_small_budget_change_adjusts_plan_cost(self):
+        """Even small budget adjustments should produce cheaper plans."""
+        shared_kwargs = dict(
+            city="Lisbon",
+            date_window=DateWindow(
+                start=date(2025, 5, 1),
+                end=date(2025, 5, 5),
+                tz="Europe/Lisbon"
+            ),
+            airports=["LIS"],
+            prefs=Preferences(themes=["food", "outdoor"])
+        )
+
+        baseline_intent = IntentV1(budget_usd_cents=160_000, **shared_kwargs)
+        cheaper_intent = IntentV1(budget_usd_cents=150_000, **shared_kwargs)
+
+        baseline_plan = build_candidate_plans(baseline_intent)[0]
+        cheaper_plan = build_candidate_plans(cheaper_intent)[0]
+
+        baseline_cost = _sum_plan_cost(baseline_plan)
+        cheaper_cost = _sum_plan_cost(cheaper_plan)
+
+        assert cheaper_cost < baseline_cost
+        assert cheaper_cost <= cheaper_intent.budget_usd_cents

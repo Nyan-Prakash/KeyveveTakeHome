@@ -29,6 +29,12 @@ from backend.app.models.plan import (
     Slot,
 )
 from backend.app.planning import build_candidate_plans, score_branches
+from backend.app.planning.budget_utils import (
+    BASELINE_DAILY_COST_CENTS,
+    build_budget_profile,
+    preferred_flight_tiers,
+    preferred_lodging_tiers,
+)
 from backend.app.planning.types import BranchFeatures
 from backend.app.planning.simple_transit import simple_inject_transit
 
@@ -704,6 +710,11 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
     if not state.plan:
         return state
 
+    budget_profile = build_budget_profile(
+        state.intent,
+        baseline_per_day_cents=BASELINE_DAILY_COST_CENTS,
+    )
+
     # Fetch real weather data via MCP/adapter
     weather_adapter = get_weather_adapter()
     weather_calls = 0
@@ -749,7 +760,7 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
         dest=state.intent.city or "Rio de Janeiro",  # Provide fallback destination
         date_window=(state.intent.date_window.start, state.intent.date_window.end),
         avoid_overnight=state.intent.prefs.avoid_overnight if state.intent.prefs else False,
-        tier_prefs=None,  # Let the adapter determine tiers based on budget
+        tier_prefs=preferred_flight_tiers(budget_profile),
         budget_usd_cents=state.intent.budget_usd_cents,
     )
 
@@ -888,19 +899,7 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
 
     # Fetch real lodging data using adapter with budget-aware selection
     from backend.app.adapters.lodging import get_lodging
-    from backend.app.models.common import Tier
-
-    # Calculate budget per day for lodging tier selection
-    trip_days = max((state.intent.date_window.end - state.intent.date_window.start).days, 1)
-    budget_per_day = state.intent.budget_usd_cents / trip_days
-    
-    # Determine tier preferences based on budget
-    if budget_per_day < 15000:  # Less than $150/day
-        tier_prefs = [Tier.budget]
-    elif budget_per_day < 30000:  # Less than $300/day  
-        tier_prefs = [Tier.budget, Tier.mid]
-    else:  # $300+ per day
-        tier_prefs = [Tier.budget, Tier.mid, Tier.luxury]
+    tier_prefs = preferred_lodging_tiers(budget_profile)
 
     lodging_options = get_lodging(
         city=state.intent.city,

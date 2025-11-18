@@ -5,6 +5,7 @@ from collections.abc import Mapping, Sequence
 
 from backend.app.models.intent import IntentV1
 from backend.app.models.plan import ChoiceFeatures
+from backend.app.planning.budget_utils import build_budget_profile, compute_cost_weight
 
 from .types import BranchFeatures, FeatureStats, ScoredPlan
 
@@ -31,30 +32,25 @@ SCORE_WEIGHTS = {
 
 def _calculate_cost_weight(intent: IntentV1) -> float:
     """Calculate dynamic cost weight based on budget generosity."""
-    baseline_per_day = 23000  # $230/day baseline
-    # Get trip duration from intent's date_window
-    trip_days = max((intent.date_window.end - intent.date_window.start).days, 1)
-    budget_per_day = intent.budget_usd_cents / trip_days
-    budget_ratio = budget_per_day / baseline_per_day
-
-    # Adjust cost weight based on budget health
-    if budget_ratio < 1.0:
-        # Tight budget - strongly prefer cheaper
-        cost_weight = -1.5
-    elif budget_ratio < 1.5:
-        # Normal budget - moderately prefer cheaper
-        cost_weight = -1.0
-    elif budget_ratio < 3.0:
-        # Good budget - neutral on cost
-        cost_weight = -0.3
-    else:
-        # Generous budget - actually prefer more expensive (better quality)
-        cost_weight = 0.5
+    profile = build_budget_profile(intent, baseline_per_day_cents=23_000)
+    cost_weight = compute_cost_weight(
+        profile,
+        tight_weight=-1.7,
+        neutral_weight=-0.8,
+        luxury_weight=0.6,
+    )
 
     # Log budget calculation for debugging
     logger.info(
-        f"Budget calculation: budget=${intent.budget_usd_cents/100:.0f}, days={trip_days}, "
-        f"per_day=${budget_per_day/100:.0f}, ratio={budget_ratio:.2f}, cost_weight={cost_weight}"
+        "Budget calculation",
+        extra={
+            "budget_usd_cents": intent.budget_usd_cents,
+            "trip_days": profile.trip_days,
+            "per_day_budget_cents": int(profile.budget_per_day_cents),
+            "per_day_ratio": profile.per_day_ratio,
+            "trip_ratio": profile.trip_ratio,
+            "cost_weight": cost_weight,
+        },
     )
     
     return cost_weight

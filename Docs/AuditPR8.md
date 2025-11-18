@@ -405,11 +405,11 @@ The codebase demonstrates exceptional quality with clean architecture, comprehen
    - ✅ [backend/app/api/health.py](../backend/app/api/health.py) - GET /healthz
    - ✅ [backend/app/api/auth.py](../backend/app/api/auth.py) - JWT auth endpoints (from PR2)
 
-4. **Streamlit UI (Removed)**
-   - ❌ frontend/plan_app.py - Removed from codebase
-   - ❌ SSE events subscription - Removed
-   - ❌ Progress messages rendering - Removed
-   - ❌ Right rail with tools/decisions - Removed
+4. **Streamlit UI**
+   - ✅ [frontend/plan_app.py](../frontend/plan_app.py) - Minimal vertical
+   - ✅ Subscribes to SSE events
+   - ✅ Renders progress messages
+   - ⚠️ Right rail with tools/decisions not fully implemented yet (expected in PR9)
 
 5. **Tests**
    - ✅ [tests/unit/test_plan_api.py](../tests/unit/test_plan_api.py) - Plan API endpoints (has collection error, needs fix)

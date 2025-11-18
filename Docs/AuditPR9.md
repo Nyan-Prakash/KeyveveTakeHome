@@ -209,11 +209,11 @@ The codebase demonstrates **exceptional implementation quality** across PRs 1-8,
   - ✅ Throttle: ≤10 events/s (configurable)
 - ⚠️ **Polling Fallback:** `GET /plan/{run_id}/status` not yet implemented
 
-**Streamlit UI (Removed)** (formerly frontend/plan_app.py)
-- ❌ Intent form removed: city, budget, airports, date_window, preferences (kid_friendly, themes, avoid_overnight)
-- ❌ SSE listener removed (was reading events)
-- ❌ Itinerary display removed
-- ❌ Edit/re-plan form removed
+**Streamlit UI** ([frontend/plan_app.py](../frontend/plan_app.py))
+- ✅ Intent form: city, budget, airports, date_window, preferences (kid_friendly, themes, avoid_overnight)
+- ✅ SSE listener stub (reads events)
+- ✅ Itinerary display placeholder
+- ⚠️ Edit/re-plan form incomplete
 
 **Merge Gates**
 - ✅ TTFE < 800ms measured (integration test placeholder)
@@ -486,7 +486,7 @@ The codebase demonstrates **exceptional implementation quality** across PRs 1-8,
 - ❌ Decisions (selector notes, repair moves) - **Missing**
 - ❌ Constraint checks / violations list - **Missing**
 - ❌ Citations display (RAG/tool provenance) - **Missing**
-- ❌ Frontend removed (plan_app.py was minimal stub with intent form + SSE listener)
+- ⚠️ Current frontend ([plan_app.py](../frontend/plan_app.py)) is minimal stub with intent form + SSE listener
 
 **Perf Gates** ([tests/integration/test_e2e_perf.py](../tests/integration/test_e2e_perf.py))
 - ✅ TTFE < 800ms test stub
@@ -613,14 +613,14 @@ None identified for PRs 1-8. Core logic is production-ready.
    - **Returns:** `{status: "running"|"completed"|"error", progress_pct: int, latest_node: str}`
    - **Priority:** High (SPEC §8.3)
 
-2. **UI Right-Rail** (PR9) - REMOVED
-   - **Location:** frontend/plan_app.py (file removed)
-   - **Action:** Was planned to add panels for:
+2. **UI Right-Rail** (PR9)
+   - **Location:** `frontend/plan_app.py`
+   - **Action:** Add panels for:
      - Tools used (name, count, total_ms)
      - Decisions (selector scores, repair moves)
      - Violations (kind, blocking, details)
      - Citations (claim → provenance)
-   - **Priority:** Removed (SPEC §14, roadmap PR9 merge gate no longer applies)
+   - **Priority:** High (SPEC §14, roadmap PR9 merge gate)
 
 3. **Enforce Perf Gates in CI** (PR9)
    - **Location:** `.github/workflows/ci.yml`
@@ -828,15 +828,20 @@ None identified for PRs 1-8. Core logic is production-ready.
 
 ## 8. Recommendations for Next Steps
 
-### Immediate (PR9 Completion) - REMOVED
+### Immediate (PR9 Completion)
 
-1. **UI Right-Rail Implementation Removed** (was 1-2 days)
+1. **Implement UI Right-Rail** (1-2 days)
    ```python
-   # frontend/plan_app.py (file removed)
-   # Previously planned to show:
-   # - Tools Used sidebar
-   # - Decisions display
-   # - Violations tracking
+   # frontend/plan_app.py
+   with st.sidebar:
+       st.header("Tools Used")
+       # Display tool_call_counts from state
+
+       st.header("Decisions")
+       # Display selector scores, repair moves
+
+       st.header("Violations")
+       # Display violations with blocking status
 
        st.header("Citations")
        # Display citations with provenance
