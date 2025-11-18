@@ -3,7 +3,9 @@ import dotenv from 'dotenv';
 import { WeatherTool } from './weather-tool.js';
 import { MCPProtocol } from './mcp-protocol.js';
 
+// Load environment variables from .env file
 dotenv.config();
+console.log('🔧 Environment loaded, API key present:', !!process.env.WEATHER_API_KEY);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -11,8 +13,16 @@ const PORT = process.env.PORT || 3001;
 // Middleware
 app.use(express.json());
 
+// Check for required environment variables
+const apiKey = process.env.WEATHER_API_KEY;
+if (!apiKey || apiKey === 'your_api_key_here') {
+  console.warn('⚠️  No valid WEATHER_API_KEY found in environment variables');
+  console.warn('📝 Please set WEATHER_API_KEY in .env file');
+  console.warn('🔗 Get your free API key from: https://openweathermap.org/api');
+}
+
 // Initialize weather tool
-const weatherTool = new WeatherTool(process.env.WEATHER_API_KEY);
+const weatherTool = new WeatherTool(apiKey);
 
 // Initialize MCP protocol handler
 const mcpProtocol = new MCPProtocol();

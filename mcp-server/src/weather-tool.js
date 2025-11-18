@@ -7,6 +7,7 @@ export class WeatherTool {
   constructor(apiKey) {
     this.apiKey = apiKey;
     this.baseUrl = 'https://api.openweathermap.org/data/2.5';
+    this.hasValidApiKey = apiKey && apiKey !== 'your_api_key_here';
   }
 
   /**
@@ -72,6 +73,31 @@ export class WeatherTool {
 
     if (!city) {
       throw new Error('City parameter is required');
+    }
+
+    if (!this.hasValidApiKey) {
+      return {
+        error: 'Weather API not available',
+        message: 'No valid OpenWeatherMap API key configured. Please set WEATHER_API_KEY in .env file.',
+        help: 'Get your free API key from: https://openweathermap.org/api',
+        city,
+        mock_data: {
+          city,
+          current: {
+            temperature_celsius: 20.0,
+            conditions: 'clear',
+            humidity: 65,
+            wind_speed_ms: 3.5
+          },
+          forecast: days > 1 ? [{
+            date: new Date().toISOString().split('T')[0],
+            high_celsius: 25.0,
+            low_celsius: 15.0,
+            conditions: 'partly cloudy',
+            precipitation_mm: 0.0
+          }] : []
+        }
+      };
     }
 
     try {
