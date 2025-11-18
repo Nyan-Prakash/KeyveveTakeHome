@@ -117,12 +117,16 @@ def map_transit_to_features(transit: TransitLeg) -> ChoiceFeatures:
         "metro": 200,  # $2
         "bus": 150,  # $1.50
         "taxi": 1500,  # $15 base estimate
+        "train": 500,  # $5 default
     }
 
     mode_str = (
         str(transit.mode.value) if hasattr(transit.mode, "value") else str(transit.mode)
     )
-    cost = cost_by_mode.get(mode_str, 0)
+    if getattr(transit, "price_usd_cents", None) is not None:
+        cost = transit.price_usd_cents or 0
+    else:
+        cost = cost_by_mode.get(mode_str, 0)
 
     return ChoiceFeatures(
         cost_usd_cents=cost,

@@ -2,9 +2,15 @@
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
-import httpx
+try:
+    import httpx
+except ImportError:  # pragma: no cover - optional dependency for tests
+    httpx = None
+
+if TYPE_CHECKING:  # pragma: no cover
+    from httpx import AsyncClient  # type: ignore
 
 from .exceptions import MCPConnectionError, MCPException, MCPTimeoutError
 
@@ -23,10 +29,12 @@ class MCPClient:
         """
         self.base_url = base_url.rstrip('/')
         self.timeout = timeout
-        self._client: httpx.AsyncClient | None = None
+        self._client: Any | None = None
 
     async def __aenter__(self):
         """Async context manager entry."""
+        if httpx is None:
+            raise MCPConnectionError("httpx is required for MCP client operations")
         self._client = httpx.AsyncClient(timeout=self.timeout)
         return self
 
@@ -35,8 +43,10 @@ class MCPClient:
         if self._client:
             await self._client.aclose()
 
-    async def _get_client(self) -> httpx.AsyncClient:
+    async def _get_client(self) -> Any:
         """Get HTTP client, creating if needed."""
+        if httpx is None:
+            raise MCPConnectionError("httpx is required for MCP client operations")
         if self._client is None:
             self._client = httpx.AsyncClient(timeout=self.timeout)
         return self._client

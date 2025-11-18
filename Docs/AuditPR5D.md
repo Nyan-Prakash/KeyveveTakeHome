@@ -78,7 +78,7 @@ Add a hard timeout watchdog (e.g., kill the threadpool future at 4 s), expose `C
 
 ### Evidence of Completion
 - LangGraph nodes defined in `backend/app/graph/nodes.py` with stub planning + synthesis logic; SSE event log via `backend/app/db/agent_events.py` + `AgentRunEvent` model/migration.
-- `/plan` POST and `/plan/{run_id}/stream` SSE implementation in `backend/app/api/plan.py` with throttling/heartbeat/resume, and a minimal Streamlit UI in `frontend/plan_app.py`.
+- `/plan` POST and `/plan/{run_id}/stream` SSE implementation in `backend/app/api/plan.py` with throttling/heartbeat/resume, and a minimal Streamlit UI (removed from `frontend/plan_app.py`).
 
 ### Gaps / Risks
 1. **Thread-unsafe session usage.** `start_run` shares the request-scoped SQLAlchemy session with a background thread (`backend/app/graph/runner.py:192-264`). FastAPI closes that session as soon as `create_plan` returns (`backend/app/api/plan.py:32-69`), so `_execute_graph` operates on a closed session and will throw `ResourceClosedError` under load.

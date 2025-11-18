@@ -887,7 +887,7 @@ async def stream_plan(run_id: UUID, last_ts: str = None):
 **Frontend Consumption (Actual):**
 
 ```python
-# frontend/plan_app.py
+# Frontend streaming implementation (removed)
 def stream_events(run_id: str):
     url = f"{API_BASE}/plan/{run_id}/stream"
 
@@ -910,7 +910,7 @@ def stream_events(run_id: str):
 **Right Rail Implementation:**
 
 ```python
-# frontend/plan_app.py (simplified)
+# Frontend implementation (removed)
 with st.sidebar:
     st.header("System Info")
 
@@ -1750,7 +1750,7 @@ CREATE TABLE agent_run (
 |------|------|--------|------|----------|
 | **Destinations** | ✅ | ✅ | `01_Destinations.py` | Search, tag filters, add/edit, soft delete, last run |
 | **Knowledge Base** | ✅ | ✅ | `02_Knowledge_Base.py` | List, upload PDF/MD, ingestion progress, chunk preview |
-| **Plan** | ✅ | ✅ | `03_Plan.py` / `plan_app.py` | Chat interface, streaming, right rail |
+| **Plan** | ❌ | ❌ | `03_Plan.py` (removed) | Chat interface, streaming, right rail (removed) |
 
 **Destinations Page (Actual):**
 
@@ -1837,11 +1837,12 @@ for item in items:
 - ⚠️ Ingestion progress: Shows spinner, but no real-time progress (embeddings stubbed)
 - ✅ Version history: Not required by spec ("with version history" likely refers to created_at)
 
-**Plan Page (Actual):**
+**Plan Page (Removed):**
 
 ```python
-# frontend/plan_app.py
-st.header("Plan Your Trip")
+# Frontend plan implementation removed
+# Previously located at frontend/plan_app.py
+# st.header("Plan Your Trip")
 
 # Intent form
 with st.form("intent"):

@@ -57,6 +57,7 @@ class TransitMode(str, Enum):
     metro = "metro"
     bus = "bus"
     taxi = "taxi"
+    train = "train"
 
 
 class ViolationKind(str, Enum):

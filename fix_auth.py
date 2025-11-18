@@ -8,7 +8,6 @@ import re
 files_to_fix = [
     "frontend/pages/02_Knowledge_Base.py",
     "frontend/pages/03_Plan.py", 
-    "frontend/plan_app.py"
 ]
 
 # Patterns to replace

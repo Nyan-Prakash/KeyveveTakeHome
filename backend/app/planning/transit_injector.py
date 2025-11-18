@@ -249,6 +249,7 @@ def _get_transit_cost(mode: TransitMode, duration_minutes: int) -> int:
         TransitMode.metro: 200,       # $2 per ride
         TransitMode.bus: 150,         # $1.50 per ride
         TransitMode.taxi: 300,        # $3 base + distance
+        TransitMode.train: 500,       # $5 default fare
     }
     
     base_cost = base_costs.get(mode, 200)
@@ -356,6 +357,7 @@ def inject_transit_between_activities(
                     TransitMode.metro: 30,    # 30 km/h
                     TransitMode.bus: 20,      # 20 km/h  
                     TransitMode.taxi: 25,     # 25 km/h
+                    TransitMode.train: 70,    # 70 km/h
                 }
                 
                 speed_kmh = mode_speeds.get(transit_mode, 20)

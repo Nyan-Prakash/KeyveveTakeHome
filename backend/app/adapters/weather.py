@@ -1,4 +1,4 @@
-"""Weather adapter using real API with 24h caching and MCP integration."""
+"""Weather adapter using MCP integration with graceful fallback fixtures."""
 
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -6,7 +6,7 @@ from typing import Any
 from backend.app.config import Settings, get_settings
 from backend.app.exec.executor import ToolExecutor
 from backend.app.exec.types import BreakerPolicy, CachePolicy
-from backend.app.models.common import Geo, Provenance
+from backend.app.models.common import Geo, Provenance, compute_response_digest
 from backend.app.models.tool_results import WeatherDay
 
 # MCP integration (imported lazily to avoid import errors if MCP not available)
@@ -45,39 +45,20 @@ class DirectWeatherAdapter:
     
     async def get_weather(self, city: str, target_date: date | None = None) -> WeatherDay:
         """Get weather for city using direct API call."""
-        if target_date is None:
-            target_date = date.today()
-            
-        # Use existing weather logic with tool executor
-        settings = get_settings()
-        executor = ToolExecutor()
-        
-        # Convert city to geo coordinates (simple fixture for now)
+        target_date = target_date or date.today()
         location = _city_to_geo(city)
-        
-        cache_policy = CachePolicy(
-            enabled=True,
-            ttl_seconds=settings.weather_ttl_hours * 3600,
-        )
-        
-        breaker_policy = BreakerPolicy(
-            failure_threshold=settings.breaker_failure_threshold,
-            cooldown_seconds=settings.breaker_timeout_s,
-        )
-        
-        # Execute weather call with resilience
-        result = await executor.execute(
-            tool_name="weather_direct",
-            tool_fn=lambda args: _fetch_weather_data(location, target_date),
-            args={},
-            cache_policy=cache_policy,
-            breaker_policy=breaker_policy,
-        )
-        
-        if result.status == "success" and result.data:
-            return _parse_weather_response(result.data, city, target_date)
-        else:
-            # Fallback to fixture weather
+
+        try:
+            data = _fetch_weather_data(location, target_date)
+            return _parse_weather_response(
+                data,
+                city,
+                target_date,
+                source="openweathermap-fixture",
+                source_url="fixture://weather",
+            )
+        except Exception:
+            # Fall back to deterministic fixture data
             return _get_fixture_weather_day(city, target_date)
 
 
@@ -95,33 +76,78 @@ def _city_to_geo(city: str) -> Geo:
     return city_coords.get(city, Geo(lat=0.0, lon=0.0))
 
 
-def _parse_weather_response(data: dict[str, Any], city: str, target_date: date) -> WeatherDay:
+def _parse_weather_response(
+    data: dict[str, Any],
+    city: str,
+    target_date: date,
+    *,
+    source: str,
+    source_url: str | None,
+) -> WeatherDay:
     """Parse weather API response into WeatherDay."""
-    return WeatherDay(
-        date=target_date,
-        city=city,
-        temperature_celsius=data.get("temperature_celsius", 20.0),
-        conditions=data.get("conditions", "clear"),
-        precipitation_mm=data.get("precipitation_mm", 0.0),
-        humidity_percent=data.get("humidity_percent", 50),
-        wind_speed_ms=data.get("wind_speed_ms", 0.0),
-        source="openweathermap"
+    temperature = data.get("temperature_celsius", 20.0)
+    temp_high = data.get("temp_c_high", temperature + 2.0)
+    temp_low = data.get("temp_c_low", temperature - 3.0)
+    wind_speed_ms = data.get("wind_speed_ms", 0.0)
+    precip_mm = data.get("precipitation_mm", 0.0)
+    conditions = data.get("conditions", "clear")
+
+    precip_prob = data.get("precip_prob")
+    if precip_prob is None:
+        precip_prob = min(precip_mm / 10.0, 1.0)
+        if conditions.lower() in {"rain", "storm", "snow"}:
+            precip_prob = max(precip_prob, 0.7)
+
+    provenance = Provenance(
+        source=source,
+        ref_id=f"weather:{city}:{target_date.isoformat()}",
+        source_url=source_url,
+        fetched_at=datetime.now(UTC),
+        cache_hit=False,
+        response_digest=None,
     )
+
+    weather = WeatherDay(
+        forecast_date=target_date,
+        precip_prob=precip_prob,
+        wind_kmh=round(wind_speed_ms * 3.6, 1),
+        temp_c_high=temp_high,
+        temp_c_low=temp_low,
+        city=city,
+        temperature_celsius=temperature,
+        conditions=conditions,
+        precipitation_mm=precip_mm,
+        humidity_percent=data.get("humidity_percent", 50),
+        wind_speed_ms=wind_speed_ms,
+        source=source,
+        provenance=provenance,
+    )
+    provenance.response_digest = compute_response_digest(weather.model_dump())
+    return weather
 
 
 def _get_fixture_weather_day(city: str, target_date: date) -> WeatherDay:
     """Generate fixture weather day."""
     day_of_year = target_date.timetuple().tm_yday
     
-    return WeatherDay(
-        date=target_date,
-        city=city,
-        temperature_celsius=20.0 + (day_of_year % 10),
-        conditions="clear" if (day_of_year % 3) != 0 else "rain",
-        precipitation_mm=0.0 if (day_of_year % 3) != 0 else 5.0,
-        humidity_percent=50 + (day_of_year % 30),
-        wind_speed_ms=2.0 + (day_of_year % 8),
-        source="fixture"
+    base_temp = 20.0 + (day_of_year % 10)
+    conditions = "clear" if (day_of_year % 3) != 0 else "rain"
+    precipitation_mm = 0.0 if conditions == "clear" else 5.0
+
+    return _parse_weather_response(
+        {
+            "temperature_celsius": base_temp,
+            "temp_c_high": base_temp + 3,
+            "temp_c_low": base_temp - 2,
+            "conditions": conditions,
+            "precipitation_mm": precipitation_mm,
+            "humidity_percent": 50 + (day_of_year % 30),
+            "wind_speed_ms": 2.0 + (day_of_year % 8),
+        },
+        city,
+        target_date,
+        source="fixture",
+        source_url="fixture://weather",
     )
 
 
@@ -131,9 +157,14 @@ def _fetch_weather_data(location: Geo, target_date: date) -> dict[str, Any]:
     # For now, return fixture data
     day_of_year = target_date.timetuple().tm_yday
     
+    base_temp = 20.0 + (day_of_year % 10)
+    conditions = "clear" if (day_of_year % 3) != 0 else "rain"
+
     return {
-        "temperature_celsius": 20.0 + (day_of_year % 10),
-        "conditions": "clear" if (day_of_year % 3) != 0 else "rain",
+        "temperature_celsius": base_temp,
+        "temp_c_high": base_temp + 4,
+        "temp_c_low": base_temp - 3,
+        "conditions": conditions,
         "precipitation_mm": 0.0 if (day_of_year % 3) != 0 else 5.0,
         "humidity_percent": 50 + (day_of_year % 30),
         "wind_speed_ms": 2.0 + (day_of_year % 8),
@@ -200,39 +231,62 @@ def get_weather_forecast(
                 "Thunderstorm": "storm",
             }
 
-            weather_day = WeatherDay(
-                date=current,
-                temperature_celsius=data.get("temp_celsius", 20.0),
-                conditions=conditions_map.get(data.get("conditions", "Clear"), "clear"),
-                precipitation_mm=data.get("precipitation_mm", 0.0),
-                humidity_percent=data.get("humidity_percent", 50),
-                wind_speed_ms=data.get("wind_speed_ms", 0.0),
-                provenance=Provenance(
-                    source="openweathermap",
-                    timestamp=datetime.now(UTC),
-                    input_args={"lat": location.lat, "lon": location.lon, "date": current.isoformat()},
-                    response_digest=None,  # Will be computed if needed
-                ),
+            wind_speed_ms = data.get("wind_speed_ms", 0.0)
+            precip_mm = data.get("precipitation_mm", 0.0)
+            temperature = data.get("temp_celsius", 20.0)
+
+            provenance = Provenance(
+                source="openweathermap",
+                ref_id=f"weather:{location.lat:.2f},{location.lon:.2f}:{current.isoformat()}",
+                source_url="https://api.openweathermap.org",
+                fetched_at=datetime.now(UTC),
+                cache_hit=bool(result.from_cache),
+                response_digest=None,
             )
+
+            weather_day = WeatherDay(
+                forecast_date=current,
+                precip_prob=min(precip_mm / 10.0, 1.0),
+                wind_kmh=round(wind_speed_ms * 3.6, 1),
+                temp_c_high=temperature + 2.0,
+                temp_c_low=temperature - 3.0,
+                temperature_celsius=temperature,
+                conditions=conditions_map.get(data.get("conditions", "Clear"), "clear"),
+                precipitation_mm=precip_mm,
+                humidity_percent=data.get("humidity_percent", 50),
+                wind_speed_ms=wind_speed_ms,
+                source="openweathermap",
+                provenance=provenance,
+            )
+            provenance.response_digest = compute_response_digest(data)
 
             results.append(weather_day)
         else:
             # Fallback to fixture weather
             fixture_data = _get_fixture_weather(current)
             
+            provenance = Provenance(
+                source="fixture",
+                ref_id=f"fixture_weather:{current.isoformat()}",
+                source_url="fixture://weather",
+                fetched_at=datetime.now(UTC),
+                cache_hit=False,
+                response_digest=None,
+            )
+
             weather_day = WeatherDay(
-                date=current,
-                temperature_celsius=fixture_data["temp_c_high"],
+                forecast_date=current,
+                precip_prob=fixture_data["precip_prob"],
+                wind_kmh=fixture_data["wind_kmh"],
+                temp_c_high=fixture_data["temp_c_high"],
+                temp_c_low=fixture_data["temp_c_low"],
+                temperature_celsius=fixture_data["temp_c_high"] - 2.0,
                 conditions="clear",
-                precipitation_mm=fixture_data["precip_prob"] * 10,  # Convert probability to mm
+                precipitation_mm=fixture_data["precip_prob"] * 10,
                 humidity_percent=50,
-                wind_speed_ms=fixture_data["wind_kmh"] / 3.6,  # Convert km/h to m/s
-                provenance=Provenance(
-                    source="fixture",
-                    timestamp=datetime.now(UTC),
-                    input_args={"date": current.isoformat()},
-                    response_digest=None,
-                ),
+                wind_speed_ms=fixture_data["wind_kmh"] / 3.6,
+                source="fixture",
+                provenance=provenance,
             )
 
             results.append(weather_day)

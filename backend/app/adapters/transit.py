@@ -43,6 +43,7 @@ def get_transit_leg(
         TransitMode.metro: 30,
         TransitMode.bus: 20,
         TransitMode.taxi: 25,
+        TransitMode.train: 80,
     }
 
     speed_kmh = mode_speeds.get(mode, 20)

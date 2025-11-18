@@ -1,10 +1,13 @@
 """Tests for MCP weather integration."""
 
-import pytest
-from datetime import date
+import asyncio
+from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from backend.app.adapters.mcp import MCPWeatherAdapter, MCPException
+from backend.app.models.common import Provenance
 from backend.app.models.tool_results import WeatherDay
 
 
@@ -13,15 +16,20 @@ class MockDirectWeatherAdapter:
     
     async def get_weather(self, city: str, target_date: date | None = None) -> WeatherDay:
         return WeatherDay(
-            date=target_date or date.today(),
+            forecast_date=target_date or date.today(),
             city=city,
             temperature_celsius=25.0,
             conditions="sunny",
             precipitation_mm=0.0,
             humidity_percent=60,
             wind_speed_ms=3.0,
-            source="mock_fallback"
+            source="mock_fallback",
+            provenance=Provenance(source="mock_fallback", fetched_at=datetime.now(UTC)),
         )
+
+
+def _prov(source: str) -> Provenance:
+    return Provenance(source=source, fetched_at=datetime.now(UTC))
 
 
 @pytest.fixture
@@ -35,114 +43,113 @@ def mcp_adapter():
     )
 
 
-@pytest.mark.asyncio
-async def test_mcp_weather_success(mcp_adapter):
+def test_mcp_weather_success(mcp_adapter):
     """Test successful MCP weather call."""
-    mock_mcp_response = {
-        "current": {
-            "temperature_celsius": 22.5,
-            "conditions": "cloudy",
-            "humidity": 65,
-            "wind_speed_ms": 2.5
-        },
-        "forecast": []
-    }
-    
-    with patch.object(mcp_adapter, '_get_weather_mcp') as mock_mcp:
-        mock_mcp.return_value = WeatherDay(
-            date=date.today(),
-            city="Paris",
-            temperature_celsius=22.5,
-            conditions="cloudy",
-            precipitation_mm=0.0,
-            humidity_percent=65,
-            wind_speed_ms=2.5,
-            source="mcp_weather"
-        )
-        
-        with patch.object(mcp_adapter, '_is_mcp_available') as mock_available:
-            mock_available.return_value = True
-            
-            result = await mcp_adapter.get_weather("Paris")
-            
-            assert result.city == "Paris"
-            assert result.temperature_celsius == 22.5
-            assert result.conditions == "cloudy"
-            assert result.source == "mcp_weather"
+
+    async def run_test():
+        with patch.object(mcp_adapter, "_get_weather_mcp") as mock_mcp:
+            mock_mcp.return_value = WeatherDay(
+                forecast_date=date.today(),
+                city="Paris",
+                temperature_celsius=22.5,
+                conditions="cloudy",
+                precipitation_mm=0.0,
+                humidity_percent=65,
+                wind_speed_ms=2.5,
+                source="mcp_weather",
+                provenance=_prov("mcp_weather"),
+            )
+
+            with patch.object(mcp_adapter, "_is_mcp_available") as mock_available:
+                mock_available.return_value = True
+
+                result = await mcp_adapter.get_weather("Paris")
+
+                assert result.city == "Paris"
+                assert result.temperature_celsius == 22.5
+                assert result.conditions == "cloudy"
+                assert result.source == "mcp_weather"
+
+    asyncio.run(run_test())
 
 
-@pytest.mark.asyncio
-async def test_mcp_weather_fallback(mcp_adapter):
+def test_mcp_weather_fallback(mcp_adapter):
     """Test fallback when MCP fails."""
-    with patch.object(mcp_adapter, '_is_mcp_available') as mock_available:
-        mock_available.return_value = False
-        
-        result = await mcp_adapter.get_weather("London")
-        
-        assert result.city == "London"
-        assert result.source == "mock_fallback"
-        assert result.temperature_celsius == 25.0
 
+    async def run_test():
+        with patch.object(mcp_adapter, "_is_mcp_available") as mock_available:
+            mock_available.return_value = False
 
-@pytest.mark.asyncio
-async def test_mcp_weather_exception_fallback(mcp_adapter):
-    """Test fallback when MCP throws exception."""
-    with patch.object(mcp_adapter, '_is_mcp_available') as mock_available:
-        mock_available.return_value = True
-        
-        with patch.object(mcp_adapter, '_get_weather_mcp') as mock_mcp:
-            mock_mcp.side_effect = MCPException("MCP server error")
-            
-            result = await mcp_adapter.get_weather("Tokyo")
-            
-            assert result.city == "Tokyo"
+            result = await mcp_adapter.get_weather("London")
+
+            assert result.city == "London"
             assert result.source == "mock_fallback"
+            assert result.temperature_celsius == 25.0
+
+    asyncio.run(run_test())
 
 
-@pytest.mark.asyncio
-async def test_mcp_availability_check(mcp_adapter):
+def test_mcp_weather_exception_fallback(mcp_adapter):
+    """Test fallback when MCP throws exception."""
+
+    async def run_test():
+        with patch.object(mcp_adapter, "_is_mcp_available") as mock_available:
+            mock_available.return_value = True
+
+            with patch.object(mcp_adapter, "_get_weather_mcp") as mock_mcp:
+                mock_mcp.side_effect = MCPException("MCP server error")
+
+                result = await mcp_adapter.get_weather("Tokyo")
+
+                assert result.city == "Tokyo"
+                assert result.source == "mock_fallback"
+
+    asyncio.run(run_test())
+
+
+def test_mcp_availability_check(mcp_adapter):
     """Test MCP availability checking and caching."""
-    with patch('backend.app.adapters.mcp.weather.MCPClient') as mock_client_class:
-        mock_client = AsyncMock()
-        mock_client.health_check.return_value = True
-        mock_client_class.return_value.__aenter__.return_value = mock_client
-        
-        # First call should check availability
-        available = await mcp_adapter._is_mcp_available()
-        assert available is True
-        
-        # Second call should use cached result
-        available2 = await mcp_adapter._is_mcp_available()
-        assert available2 is True
-        
-        # Health check should only be called once (cached)
-        mock_client.health_check.assert_called_once()
+
+    async def run_test():
+        with patch("backend.app.adapters.mcp.weather.MCPClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.health_check.return_value = True
+            mock_client_class.return_value.__aenter__.return_value = mock_client
+
+            available = await mcp_adapter._is_mcp_available()
+            assert available is True
+
+            available2 = await mcp_adapter._is_mcp_available()
+            assert available2 is True
+
+            mock_client.health_check.assert_called_once()
+
+    asyncio.run(run_test())
 
 
-@pytest.mark.asyncio
-async def test_mcp_parse_response():
+def test_mcp_parse_response():
     """Test MCP response parsing."""
     adapter = MCPWeatherAdapter("http://test", MockDirectWeatherAdapter())
-    
+
     mcp_response = {
         "current": {
             "temperature_celsius": 18.5,
             "conditions": "rain",
             "humidity": 80,
-            "wind_speed_ms": 4.2
+            "wind_speed_ms": 4.2,
         },
         "forecast": [
             {
                 "date": "2025-11-18",
                 "high_celsius": 20.0,
                 "conditions": "cloudy",
-                "precipitation_mm": 2.5
+                "precipitation_mm": 2.5,
             }
-        ]
+        ],
     }
-    
+
     result = adapter._parse_mcp_response(mcp_response, "Madrid", date(2025, 11, 18))
-    
+
     assert result.city == "Madrid"
     assert result.temperature_celsius == 18.5
     assert result.conditions == "rain"
@@ -151,11 +158,10 @@ async def test_mcp_parse_response():
     assert result.source == "mcp_weather"
 
 
-@pytest.mark.asyncio
-async def test_mcp_parse_response_forecast_only():
+def test_mcp_parse_response_forecast_only():
     """Test MCP response parsing with only forecast data."""
     adapter = MCPWeatherAdapter("http://test", MockDirectWeatherAdapter())
-    
+
     mcp_response = {
         "current": {},
         "forecast": [
@@ -163,13 +169,13 @@ async def test_mcp_parse_response_forecast_only():
                 "date": "2025-11-18",
                 "high_celsius": 15.0,
                 "conditions": "snow",
-                "precipitation_mm": 8.0
+                "precipitation_mm": 8.0,
             }
-        ]
+        ],
     }
-    
+
     result = adapter._parse_mcp_response(mcp_response, "Helsinki", date(2025, 11, 18))
-    
+
     assert result.city == "Helsinki"
     assert result.temperature_celsius == 15.0
     assert result.conditions == "snow"

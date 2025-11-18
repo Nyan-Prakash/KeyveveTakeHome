@@ -1,9 +1,10 @@
 """MCP Weather adapter with fallback to direct API calls."""
 
 import logging
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any
 
+from backend.app.models.common import Provenance, compute_response_digest
 from backend.app.models.tool_results import WeatherDay
 
 from .client import MCPClient
@@ -78,28 +79,109 @@ class MCPWeatherAdapter:
             # Parse MCP response
             return self._parse_mcp_response(result, city, target_date)
 
-    def _parse_mcp_response(self, mcp_result: dict[str, Any], city: str, target_date: date | None) -> WeatherDay:
+    def _parse_mcp_response(
+        self, mcp_result: dict[str, Any], city: str, target_date: date | None
+    ) -> WeatherDay:
         """Parse MCP weather response into WeatherDay."""
         try:
-            current = mcp_result.get("current", {})
-            forecast = mcp_result.get("forecast", [])
-            
-            # Use current weather or first forecast day
-            weather_data = current if current else (forecast[0] if forecast else {})
-            
-            return WeatherDay(
-                date=target_date or date.today(),
-                city=city,
-                temperature_celsius=weather_data.get("temperature_celsius") or weather_data.get("high_celsius", 20.0),
-                conditions=weather_data.get("conditions", "clear"),
-                precipitation_mm=weather_data.get("precipitation_mm", 0.0),
-                humidity_percent=weather_data.get("humidity", 50),
-                wind_speed_ms=weather_data.get("wind_speed_ms", 0.0),
-                source="mcp_weather"
+            current = mcp_result.get("current", {}) or {}
+            forecast = mcp_result.get("forecast", []) or []
+            if not current and not forecast:
+                raise MCPException("Invalid MCP weather response format: empty payload")
+            target = target_date or date.today()
+
+            selected_forecast = self._select_forecast_for_date(forecast, target)
+
+            current_temp = current.get("temperature_celsius")
+            temp_high = (
+                selected_forecast.get("high_celsius")
+                if selected_forecast
+                else current_temp
             )
-            
+            temp_low = (
+                selected_forecast.get("low_celsius")
+                if selected_forecast
+                else (current_temp - 3.0 if current_temp is not None else 15.0)
+            )
+            temperature = current_temp or temp_high or 20.0
+
+            precip_mm = None
+            if selected_forecast:
+                precip_mm = selected_forecast.get("precipitation_mm")
+
+            conditions = (
+                (current.get("conditions") or "")
+                or (selected_forecast.get("conditions") if selected_forecast else "")
+            )
+
+            precip_prob = self._estimate_precip_probability(
+                precip_mm, conditions or ""
+            )
+            wind_speed_ms = current.get("wind_speed_ms", 0.0)
+            wind_kmh = round(wind_speed_ms * 3.6, 1)
+
+            provenance = Provenance(
+                source="mcp_weather",
+                ref_id=f"mcp_weather:{city}:{target.isoformat()}",
+                source_url=f"{self.mcp_endpoint}/mcp/tools/call",
+                fetched_at=datetime.now(UTC),
+                cache_hit=False,
+                response_digest=None,
+            )
+
+            weather = WeatherDay(
+                forecast_date=target,
+                precip_prob=precip_prob,
+                wind_kmh=wind_kmh,
+                temp_c_high=temp_high or temperature,
+                temp_c_low=temp_low or temperature - 3.0,
+                city=city,
+                temperature_celsius=temperature,
+                conditions=(conditions or "clear"),
+                precipitation_mm=precip_mm,
+                humidity_percent=current.get("humidity"),
+                wind_speed_ms=wind_speed_ms,
+                source="mcp_weather",
+                provenance=provenance,
+            )
+            provenance.response_digest = compute_response_digest(
+                {"current": current, "forecast": selected_forecast}
+            )
+
+            return weather
+
         except (KeyError, IndexError, TypeError) as e:
-            raise MCPException(f"Invalid MCP weather response format: {e}")
+            raise MCPException(f"Invalid MCP weather response format: {e}") from e
+
+    def _select_forecast_for_date(
+        self, forecast: list[dict[str, Any]], target: date
+    ) -> dict[str, Any] | None:
+        """Select a forecast entry matching the desired date."""
+        if not forecast:
+            return None
+
+        for entry in forecast:
+            try:
+                entry_date = entry.get("date")
+                if entry_date and entry_date.startswith(target.isoformat()):
+                    return entry
+            except AttributeError:
+                continue
+
+        # Fallback to first entry
+        return forecast[0]
+
+    def _estimate_precip_probability(
+        self, precip_mm: float | None, conditions: str
+    ) -> float:
+        """Estimate precipitation probability from MCP response data."""
+        if precip_mm is None:
+            precip_mm = 0.0
+
+        prob = min(precip_mm / 10.0, 1.0)
+        if conditions.lower() in {"rain", "snow", "storm"}:
+            prob = max(prob, 0.7)
+        return prob
 
     async def reset_availability_cache(self):
         """Reset MCP availability cache (useful for testing)."""

@@ -272,7 +272,7 @@ This codebase represents a week-long take-home implementation of an agentic trav
 5. **Streamlit UI:**
    - Not found in repo (should be in `/frontend`)
    - README mentions Streamlit frontend
-   - Only stub plan_app.py present in frontend/
+   - plan_app.py removed from frontend/ (was stub)
 
 #### Quality Assessment
 

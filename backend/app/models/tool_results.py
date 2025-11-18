@@ -71,10 +71,29 @@ class WeatherDay(BaseModel):
     """Weather forecast for a single day."""
 
     forecast_date: date = Field(description="Forecast date")
-    precip_prob: float = Field(description="Precipitation probability (0.0-1.0)")
-    wind_kmh: float = Field(description="Wind speed in km/h")
-    temp_c_high: float = Field(description="High temperature in Celsius")
-    temp_c_low: float = Field(description="Low temperature in Celsius")
+    precip_prob: float = Field(
+        default=0.0, description="Precipitation probability (0.0-1.0)"
+    )
+    wind_kmh: float = Field(default=0.0, description="Wind speed in km/h")
+    temp_c_high: float = Field(default=0.0, description="High temperature in Celsius")
+    temp_c_low: float = Field(default=0.0, description="Low temperature in Celsius")
+    city: str | None = Field(default=None, description="City for this forecast")
+    temperature_celsius: float | None = Field(
+        default=None, description="Current/average temperature in Celsius"
+    )
+    conditions: str | None = Field(
+        default=None, description="Text description of weather conditions"
+    )
+    precipitation_mm: float | None = Field(
+        default=None, description="Estimated precipitation in millimeters"
+    )
+    humidity_percent: float | None = Field(
+        default=None, description="Humidity percentage"
+    )
+    wind_speed_ms: float | None = Field(
+        default=None, description="Wind speed in meters/second"
+    )
+    source: str | None = Field(default=None, description="Weather data source")
     provenance: Provenance = Field(description="Data source information")
 
 
@@ -87,6 +106,15 @@ class TransitLeg(BaseModel):
     duration_seconds: int = Field(description="Travel duration in seconds")
     last_departure: time | None = Field(
         default=None, description="Last departure for public transit"
+    )
+    price_usd_cents: int | None = Field(
+        default=None, description="Estimated price in USD cents"
+    )
+    route_name: str | None = Field(
+        default=None, description="Transit line or route name"
+    )
+    neighborhoods: list[str] | None = Field(
+        default=None, description="Neighborhoods or areas served"
     )
     provenance: Provenance = Field(description="Data source information")
 

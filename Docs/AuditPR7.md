@@ -154,12 +154,12 @@
 - [backend/app/graph/runner.py](backend/app/graph/runner.py:1) - Graph runner
 - [backend/app/api/plan.py](backend/app/api/plan.py:1) - Plan endpoints with SSE (EventSourceResponse)
 - [backend/app/db/models/agent_run_event.py](backend/app/db/models/agent_run_event.py:1) - Event persistence for SSE
-- [frontend/plan_app.py](frontend/plan_app.py:1) - Streamlit UI with intent form
+- frontend/plan_app.py (removed) - Streamlit UI with intent form (removed)
 
 ⚠️ **Partially Complete:**
 - LangGraph nodes exist but verifier→repair→synth→responder are stubs or missing
 - SSE endpoint exists but heartbeat/throttle/resume logic not verified
-- Streamlit UI has intent form but event rendering not verified
+- Streamlit UI removed (had intent form but event rendering not verified)
 
 ❌ **Missing:**
 - TTFE < 800ms test with fake nodes (roadmap line 73)

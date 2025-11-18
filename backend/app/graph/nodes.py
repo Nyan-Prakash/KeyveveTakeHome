@@ -1,5 +1,6 @@
 """LangGraph nodes implementing PR6 planner and selector logic."""
 
+import asyncio
 import json
 import random
 import re
@@ -7,9 +8,10 @@ from datetime import UTC, datetime, time, timedelta
 
 from openai import OpenAI
 
+from backend.app.adapters.weather import get_weather_adapter
 from backend.app.config import get_openai_api_key
 from backend.app.models.common import ChoiceKind, Geo, Provenance, TimeWindow, TransitMode, compute_response_digest
-from backend.app.models.tool_results import FlightOption
+from backend.app.models.tool_results import FlightOption, WeatherDay
 from backend.app.models.itinerary import (
     Activity,
     Citation,
@@ -222,6 +224,35 @@ IMPORTANT: Only extract entries that are clearly identifiable airlines or flight
         return {}
 
 
+def _normalize_transit_mode(mode: str | None) -> str | None:
+    """Normalize transit mode strings from RAG to TransitMode enum values."""
+    if not mode:
+        return None
+
+    normalized = mode.strip().lower()
+    normalized = normalized.replace("-", " ")
+
+    alias_map = {
+        "subway": "metro",
+        "underground": "metro",
+        "tube": "metro",
+        "tram": "metro",
+        "light rail": "metro",
+        "u bahn": "metro",
+        "metro line": "metro",
+        "rail": "train",
+        "s bahn": "train",
+        "railway": "train",
+        "rideshare": "taxi",
+        "uber": "taxi",
+        "cab": "taxi",
+    }
+    normalized = alias_map.get(normalized, normalized)
+
+    allowed = {"walk", "metro", "bus", "taxi", "train"}
+    return normalized if normalized in allowed else None
+
+
 def _extract_transit_info_from_rag(chunks: list[str]) -> dict[int, dict[str, any]]:
     """Extract transit information from RAG chunks using LLM.
 
@@ -296,8 +327,11 @@ IMPORTANT: Only extract entries that are clearly identifiable transit routes or 
             if transit.get("duration_minutes") is not None:
                 duration_seconds = int(transit["duration_minutes"] * 60)
 
+            # Normalize mode strings to supported enum values
+            normalized_mode = _normalize_transit_mode(transit.get("mode"))
+
             transit_info_map[idx] = {
-                "mode": transit.get("mode"),
+                "mode": normalized_mode or transit.get("mode"),
                 "route_name": transit.get("route_name"),
                 "neighborhoods": transit.get("neighborhoods", []),
                 "price_usd_cents": price_usd_cents,
@@ -409,6 +443,47 @@ IMPORTANT:
         # Fallback to empty dict if LLM extraction fails
         print(f"Warning: Lodging extraction failed: {e}. Using empty lodging map.")
         return {}
+
+
+def _await_sync(coro):
+    """Run an async coroutine from synchronous context."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        future = asyncio.run_coroutine_threadsafe(coro, loop)
+        return future.result()
+
+    return asyncio.run(coro)
+
+
+def _fallback_weather_day(city: str | None, target_date):
+    """Create deterministic fixture weather when MCP/unified adapter is unavailable."""
+    label = city or "Unknown"
+    return WeatherDay(
+        forecast_date=target_date,
+        precip_prob=0.15,
+        wind_kmh=15.0,
+        temp_c_high=22.0,
+        temp_c_low=12.0,
+        city=label,
+        temperature_celsius=18.0,
+        conditions="clear",
+        precipitation_mm=0.0,
+        humidity_percent=55.0,
+        wind_speed_ms=4.0,
+        source="fixture",
+        provenance=Provenance(
+            source="fixture",
+            ref_id=f"fixture:weather:{label}:{target_date.isoformat()}",
+            source_url="fixture://weather",
+            fetched_at=datetime.now(UTC),
+            cache_hit=False,
+            response_digest=None,
+        ),
+    )
 
 
 def intent_node(state: OrchestratorState) -> OrchestratorState:
@@ -629,21 +704,42 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
     if not state.plan:
         return state
 
-    # Simulate weather API calls - one per day
+    # Fetch real weather data via MCP/adapter
+    weather_adapter = get_weather_adapter()
+    weather_calls = 0
+
     for day_plan in state.plan.days:
-        state.weather_by_date[day_plan.date] = WeatherDay(
-            forecast_date=day_plan.date,
-            precip_prob=0.1,  # 10% chance of rain (sunny)
-            wind_kmh=15.0,
-            temp_c_high=22.0,
-            temp_c_low=12.0,
-            provenance=Provenance(
-                source="tool",
-                fetched_at=datetime.now(UTC),
-                cache_hit=False,
-            ),
+        city = state.intent.city or "Unknown"
+        try:
+            if weather_adapter and city:
+                weather_day = _await_sync(
+                    weather_adapter.get_weather(city, day_plan.date)
+                )
+                weather_calls += 1
+            else:
+                raise RuntimeError("Weather adapter not available")
+        except Exception as exc:  # noqa: BLE001
+            state.messages.append(
+                f"Weather lookup failed for {day_plan.date.isoformat()}, using fixture: {exc}"
+            )
+            weather_day = _fallback_weather_day(city, day_plan.date)
+
+        # Ensure mandatory fields present for verifiers
+        if weather_day.forecast_date != day_plan.date:
+            weather_day.forecast_date = day_plan.date
+        if weather_day.wind_kmh == 0 and weather_day.wind_speed_ms is not None:
+            weather_day.wind_kmh = round(weather_day.wind_speed_ms * 3.6, 1)
+        if weather_day.temp_c_high == 0 and weather_day.temperature_celsius is not None:
+            weather_day.temp_c_high = weather_day.temperature_celsius
+        if weather_day.temp_c_low == 0 and weather_day.temperature_celsius is not None:
+            weather_day.temp_c_low = weather_day.temperature_celsius - 3
+
+        state.weather_by_date[day_plan.date] = weather_day
+
+    if state.plan.days:
+        state.tool_call_counts["weather"] = (
+            weather_calls if weather_calls else len(state.plan.days)
         )
-        state.tool_call_counts["weather"] = state.tool_call_counts.get("weather", 0) + 1
 
     # Fetch real flight data using adapter with budget-aware selection
     from backend.app.adapters.flights import get_flights
@@ -660,6 +756,7 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
     # Process flight choices from plan and enrich with RAG data
     flight_keywords = _extract_flight_info_from_rag(state.rag_chunks)
     flight_count = 0
+    processed_flight_refs: set[str] = set()
 
     try:
         for day_plan in state.plan.days:
@@ -667,7 +764,7 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
                 for choice in slot.choices:
                     if (
                         choice.kind == ChoiceKind.flight
-                        and choice.option_ref not in state.flights
+                        and choice.option_ref not in processed_flight_refs
                     ):
                         # Try to extract flight info from RAG chunks
                         flight_info = None
@@ -778,7 +875,8 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
                         flight_data = flight.model_dump(mode="json")
                         flight.provenance.response_digest = compute_response_digest(flight_data)
 
-                        state.flights[choice.option_ref] = flight
+                        state.flights[flight.flight_id] = flight
+                        processed_flight_refs.add(choice.option_ref)
                         flight_count += 1
 
     except Exception as e:
@@ -906,6 +1004,7 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
 
     # Populate transit legs and enrich with RAG data
     transit_keywords = _extract_transit_info_from_rag(state.rag_chunks)
+    transit_keyword_items = list(transit_keywords.items())
     transit_count = 0
 
     for day_plan in state.plan.days:
@@ -915,63 +1014,81 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
                     choice.kind == ChoiceKind.transit
                     and choice.option_ref not in state.transit_legs
                 ):
-                    # Create transit leg using the adapter
                     from backend.app.adapters.transit import get_transit_leg
-                    
+
                     # Extract location data from the choice
-                    # For fixture data, create fake geo coordinates
                     from_geo = Geo(lat=48.8566, lon=2.3522)  # Default Paris center
                     to_geo = Geo(lat=48.8566 + 0.01, lon=2.3522 + 0.01)  # Slightly offset
-                    
-                    # Extract transit mode from choice.option_ref
+
+                    # Extract transit mode from choice.option_ref as fallback
                     mode_str = choice.option_ref.split("_")[-1] if "_" in choice.option_ref else "metro"
                     try:
                         mode = TransitMode(mode_str)
                     except ValueError:
-                        mode = TransitMode.metro  # Default fallback
+                        mode = TransitMode.metro
+
+                    matching_rag_idx: int | None = None
+                    matching_rag: dict[str, any] | None = None
+
+                    if transit_keyword_items:
+                        preferred_mode = mode.value
+                        for rag_idx, rag_info in transit_keyword_items:
+                            rag_mode = rag_info.get("mode")
+                            if rag_mode and preferred_mode and rag_mode == preferred_mode:
+                                matching_rag_idx = rag_idx
+                                matching_rag = rag_info
+                                break
+
+                        if matching_rag is None:
+                            matching_rag_idx, matching_rag = transit_keyword_items[
+                                transit_count % len(transit_keyword_items)
+                            ]
+
+                    # Override mode with RAG data if available
+                    if matching_rag and matching_rag.get("mode"):
+                        normalized_mode = _normalize_transit_mode(matching_rag.get("mode"))
+                        if normalized_mode:
+                            try:
+                                mode = TransitMode(normalized_mode)
+                            except ValueError:
+                                pass
 
                     transit_leg = get_transit_leg(
                         from_geo=from_geo,
                         to_geo=to_geo,
-                        mode_prefs=[mode]
+                        mode_prefs=[mode],
                     )
 
-                    # Try to match RAG transit data by mode and neighborhoods
-                    matching_rag = None
-                    if transit_keywords:
-                        try:
-                            for rag_idx, rag_info in transit_keywords.items():
-                                rag_mode = rag_info.get("mode", "").lower()
-                                transit_mode_str = mode.value.lower()
-                                
-                                # Match by mode
-                                if rag_mode == transit_mode_str:
-                                    # Check if this RAG transit hasn't been used yet
-                                    if not any(
-                                        leg.provenance.ref_id.endswith(str(rag_idx)) 
-                                        for leg in state.transit_legs.values()
-                                    ):
-                                        matching_rag = rag_info
-                                        break
-                        except (AttributeError, TypeError) as e:
-                            print(f"Warning: Error matching transit for {choice.option_ref}: {e}")
-                            pass
-
-                    # If we have RAG data, use it to enrich the transit leg
+                    # Enrich transit leg and slot features with RAG data if available
                     if matching_rag:
-                        # Use RAG-derived price if available
-                        if matching_rag.get("price_usd_cents") and matching_rag["price_usd_cents"] > 0:
-                            # We can't directly modify the cost in TransitLeg, but we can update the provenance
-                            # to indicate RAG enrichment
-                            pass
-                        
-                        # Use RAG-derived duration if available
-                        if matching_rag.get("duration_seconds"):
-                            transit_leg.duration_seconds = matching_rag["duration_seconds"]
-                        
-                        # Update provenance to indicate RAG enrichment
+                        price_cents = matching_rag.get("price_usd_cents")
+                        duration_seconds = matching_rag.get("duration_seconds")
+                        route_name = matching_rag.get("route_name")
+                        neighborhoods = matching_rag.get("neighborhoods") or []
+
+                        if price_cents is not None:
+                            transit_leg.price_usd_cents = price_cents
+                            if choice.features:
+                                choice.features.cost_usd_cents = price_cents
+
+                        if duration_seconds is not None:
+                            transit_leg.duration_seconds = duration_seconds
+                            if choice.features:
+                                choice.features.travel_seconds = duration_seconds
+
+                        if route_name:
+                            transit_leg.route_name = route_name
+                        if neighborhoods:
+                            if isinstance(neighborhoods, list):
+                                transit_leg.neighborhoods = neighborhoods
+                            else:
+                                transit_leg.neighborhoods = [str(neighborhoods)]
+
                         transit_leg.provenance.source = "fixture+rag"
-                        transit_leg.provenance.ref_id = f"enriched:{transit_leg.provenance.ref_id}:{rag_idx}"
+                        if matching_rag_idx is not None:
+                            transit_leg.provenance.ref_id = (
+                                f"enriched:{transit_leg.provenance.ref_id}:{matching_rag_idx}"
+                            )
 
                     state.transit_legs[choice.option_ref] = transit_leg
                     transit_count += 1
@@ -1443,10 +1560,26 @@ def synth_node(state: OrchestratorState) -> OrchestratorState:
                 and choice.option_ref in state.transit_legs
             ):
                 leg = state.transit_legs[choice.option_ref]
-                name = f"{leg.mode.value.title()} transit"
+                route_display = getattr(leg, "route_name", None)
+                name = (
+                    f"{route_display} ({leg.mode.value.title()})"
+                    if route_display
+                    else f"{leg.mode.value.title()} transit"
+                )
                 notes_parts.append(f"~{leg.duration_seconds // 60} minutes")
-                activity_cost = choice.features.cost_usd_cents
-                transit_cost += choice.features.cost_usd_cents
+
+                if getattr(leg, "neighborhoods", None):
+                    neighborhoods = ", ".join(leg.neighborhoods)
+                    notes_parts.append(neighborhoods)
+
+                # Prefer enriched costs, fall back to leg price if present
+                if choice.features and choice.features.cost_usd_cents is not None:
+                    activity_cost = choice.features.cost_usd_cents
+                else:
+                    activity_cost = getattr(leg, "price_usd_cents", None)
+
+                if activity_cost is not None:
+                    transit_cost += activity_cost
 
                 # Citation for transit
                 citations.append(
