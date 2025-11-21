@@ -388,7 +388,7 @@ def main():
     if not st.session_state.chat_messages:
         st.markdown("### 👋 Welcome! Try saying:")
         st.info(
-            "- 'I want to visit Madrid for 5 days in March with a $3000 budget'\n"
+            "I want to visit Munich for 5 days in March 2- March 7 with a $3000 budget"
             "- 'Plan a kid-friendly trip to Denver this summer'\n"
             "- 'I need a cultural trip to Barcelona for a week'"
         )

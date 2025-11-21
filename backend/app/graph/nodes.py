@@ -142,6 +142,26 @@ IMPORTANT: Only extract entries that are clearly identifiable attractions with p
         print(f"Warning: LLM extraction failed: {e}. Using empty venue map.")
         return {}
 
+    # Log extraction results
+    print("\n" + "="*60)
+    print("RAG ATTRACTIONS/VENUES EXTRACTION RESULTS")
+    print("="*60)
+    print(f"Processed {len(chunks[:20])} RAG chunks")
+    print(f"Extracted {len(venue_info_map)} attractions:")
+    for idx, venue in venue_info_map.items():
+        print(f"\n  Attraction {idx}:")
+        print(f"    Name: {venue.get('name')}")
+        print(f"    Type: {venue.get('type')}")
+        print(f"    Indoor: {venue.get('indoor')}")
+        cost = venue.get('cost_usd_cents')
+        if cost:
+            print(f"    Cost: ${cost / 100:.2f}")
+        else:
+            print(f"    Cost: Free/Unknown")
+    print("="*60 + "\n")
+
+    return venue_info_map
+
 
 def _extract_flight_info_from_rag(chunks: list[str]) -> dict[int, dict[str, any]]:
     """Extract flight information from RAG chunks using LLM.
@@ -170,7 +190,6 @@ For each flight/airline mentioned, extract:
 - origin_airport: Origin airport code (e.g., "JFK", "LAX") if mentioned
 - dest_airport: Destination airport code (e.g., "GIG", "MAD") if mentioned
 - price_usd: Flight price in USD if mentioned (extract numbers like "$450", "$1,200"). If a range like "$400-600", use the lower value.
-- duration_hours: Flight duration in hours if mentioned (extract from text like "8 hours", "10h 30m")
 
 Text:
 {combined_text}
@@ -228,6 +247,24 @@ IMPORTANT: Only extract entries that are clearly identifiable airlines or flight
         # Fallback to empty dict if LLM extraction fails
         print(f"Warning: Flight extraction failed: {e}. Using empty flight map.")
         return {}
+
+    # Log extraction results
+    print("\n" + "="*60)
+    print("RAG FLIGHT EXTRACTION RESULTS")
+    print("="*60)
+    print(f"Processed {len(chunks[:20])} RAG chunks")
+    print(f"Extracted {len(flight_info_map)} flights:")
+    for idx, flight in flight_info_map.items():
+        print(f"\n  Flight {idx}:")
+        print(f"    Airline: {flight.get('airline')}")
+        print(f"    Route: {flight.get('route')}")
+        print(f"    Origin: {flight.get('origin_airport')}")
+        print(f"    Dest: {flight.get('dest_airport')}")
+        print(f"    Price: ${flight.get('price_usd_cents', 0) / 100:.2f}")
+        print(f"    Duration: {flight.get('duration_hours')} hours")
+    print("="*60 + "\n")
+
+    return flight_info_map
 
 
 def _normalize_transit_mode(mode: str | None) -> str | None:
@@ -351,6 +388,29 @@ IMPORTANT: Only extract entries that are clearly identifiable transit routes or 
         print(f"Warning: Transit extraction failed: {e}. Using empty transit map.")
         return {}
 
+    # Log extraction results
+    print("\n" + "="*60)
+    print("RAG TRANSIT EXTRACTION RESULTS")
+    print("="*60)
+    print(f"Processed {len(chunks[:20])} RAG chunks")
+    print(f"Extracted {len(transit_info_map)} transit options:")
+    for idx, transit in transit_info_map.items():
+        print(f"\n  Transit {idx}:")
+        print(f"    Route: {transit.get('route_name')}")
+        print(f"    Mode: {transit.get('mode')}")
+        neighborhoods = transit.get('neighborhoods', [])
+        if neighborhoods:
+            print(f"    Areas: {', '.join(neighborhoods[:3])}")
+        cost = transit.get('price_usd_cents')
+        if cost:
+            print(f"    Cost: ${cost / 100:.2f}")
+        duration = transit.get('duration_seconds')
+        if duration:
+            print(f"    Duration: ~{duration // 60} min")
+    print("="*60 + "\n")
+
+    return transit_info_map
+
 
 def _extract_lodging_info_from_rag(chunks: list[str]) -> dict[int, dict[str, any]]:
     """Extract lodging information from RAG chunks using LLM.
@@ -378,19 +438,21 @@ For each lodging option, extract:
 - tier: Category (budget, mid, luxury, or boutique)
 - amenities: List of notable features/amenities mentioned
 - neighborhood: Location/district if mentioned
+- price_usd: Price per night in USD (extract from text like "Hotel Name: 180" or "Hotel Name**: 400"). Return the exact number found.
 
 Text:
 {combined_text}
 
 Return a JSON array of lodging options. Example format:
 [
-  {{"name": "Hotel Villa Magna", "tier": "luxury", "amenities": ["Rosewood", "Salamanca district"], "neighborhood": "Salamanca"}},
-  {{"name": "The Hat Madrid", "tier": "budget", "amenities": ["hostel", "rooftop terrace"], "neighborhood": "city center"}}
+  {{"name": "Hotel Villa Magna", "tier": "luxury", "amenities": ["Rosewood", "Salamanca district"], "neighborhood": "Salamanca", "price_usd": 400}},
+  {{"name": "The Hat Madrid", "tier": "budget", "amenities": ["hostel", "rooftop terrace"], "neighborhood": "city center", "price_usd": 65}}
 ]
 
 IMPORTANT:
 - Only extract entries that are clearly identifiable hotels/lodging with proper names
 - Categorize tier based on context (luxury hotels, mid-range, budget-friendly, boutique)
+- Extract price as the number that appears after the colon (e.g., "Hotel Name: 180" → 180)
 - Do NOT invent information not in the text"""
 
     try:
@@ -415,32 +477,36 @@ IMPORTANT:
 
         lodging_options = json.loads(content)
 
-        # Convert to the expected format with tier-based pricing
+        # Convert to the expected format using RAG-extracted prices
         lodging_info_map = {}
         tier_pricing = {
-            "budget": (6000, 9000),      # $60-90/night
-            "mid": (12000, 18000),       # $120-180/night
-            "luxury": (30000, 40000),    # $300-400/night
-            "boutique": (15000, 25000),  # $150-250/night
+            "budget": (6000, 9000),      # $60-90/night (fallback only)
+            "mid": (12000, 18000),       # $120-180/night (fallback only)
+            "luxury": (30000, 40000),    # $300-400/night (fallback only)
+            "boutique": (15000, 25000),  # $150-250/night (fallback only)
         }
 
         for idx, lodging in enumerate(lodging_options):
             tier = lodging.get("tier", "mid").lower()
 
-            # Estimate price based on tier
-            if tier in tier_pricing:
+            # Use RAG-extracted price if available, otherwise estimate from tier
+            if lodging.get("price_usd") is not None:
+                # Convert extracted price to cents
+                price_cents = int(lodging["price_usd"] * 100)
+            elif tier in tier_pricing:
+                # Fallback: estimate based on tier
                 min_price, max_price = tier_pricing[tier]
-                # Use midpoint of tier range
-                estimated_price = (min_price + max_price) // 2
+                price_cents = (min_price + max_price) // 2
             else:
-                estimated_price = 15000  # Default $150/night
+                # Default fallback
+                price_cents = 15000  # $150/night
 
             lodging_info_map[idx] = {
                 "name": lodging.get("name"),
                 "tier": tier,
                 "amenities": lodging.get("amenities", []),
                 "neighborhood": lodging.get("neighborhood"),
-                "price_per_night_usd_cents": estimated_price,
+                "price_per_night_usd_cents": price_cents,
             }
 
         return lodging_info_map
@@ -449,6 +515,25 @@ IMPORTANT:
         # Fallback to empty dict if LLM extraction fails
         print(f"Warning: Lodging extraction failed: {e}. Using empty lodging map.")
         return {}
+
+    # Log extraction results
+    print("\n" + "="*60)
+    print("RAG LODGING EXTRACTION RESULTS")
+    print("="*60)
+    print(f"Processed {len(chunks[:20])} RAG chunks")
+    print(f"Extracted {len(lodging_info_map)} lodging options:")
+    for idx, lodging in lodging_info_map.items():
+        print(f"\n  Lodging {idx}:")
+        print(f"    Name: {lodging.get('name')}")
+        print(f"    Tier: {lodging.get('tier')}")
+        print(f"    Neighborhood: {lodging.get('neighborhood')}")
+        print(f"    Price: ${lodging.get('price_per_night_usd_cents', 0) / 100:.2f}/night")
+        amenities = lodging.get('amenities', [])
+        if amenities:
+            print(f"    Amenities: {', '.join(amenities[:3])}")
+    print("="*60 + "\n")
+
+    return lodging_info_map
 
 
 def _await_sync(coro):
@@ -769,6 +854,13 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
     flight_count = 0
     processed_flight_refs: set[str] = set()
 
+    # Log RAG flight keywords availability
+    print(f"\n📋 RAG Flight Keywords Available: {len(flight_keywords)} flights")
+    if flight_keywords:
+        print("Available RAG flights:")
+        for idx, info in flight_keywords.items():
+            print(f"  [{idx}] {info.get('airline') or 'Unknown Airline'} - ${info.get('price_usd_cents', 0)/100:.2f}")
+
     try:
         for day_plan in state.plan.days:
             for slot in day_plan.slots:
@@ -777,11 +869,16 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
                         choice.kind == ChoiceKind.flight
                         and choice.option_ref not in processed_flight_refs
                     ):
+                        # Log flight processing
+                        print(f"\n✈️  Processing flight choice: {choice.option_ref}")
+
                         # Try to extract flight info from RAG chunks
                         flight_info = None
                         if flight_keywords:
                             # Use round-robin assignment to distribute RAG data across flight choices
-                            flight_info = flight_keywords.get(flight_count % len(flight_keywords))
+                            rag_idx = flight_count % len(flight_keywords)
+                            flight_info = flight_keywords.get(rag_idx)
+                            print(f"  → Matched to RAG flight {rag_idx}: {flight_info.get('airline') if flight_info else 'None'}")
 
                         # Try to find a matching fixture flight, or use RAG data to create new flight
                         matching_flight = None
@@ -809,13 +906,17 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
                             airline = flight_info.get("airline") or "Unknown Airline"
                             price_cents = flight_info.get("price_usd_cents") or choice.features.cost_usd_cents
                             duration_seconds = (
-                                int(flight_info.get("duration_hours", 8) * 3600) 
-                                if flight_info.get("duration_hours") 
+                                int(flight_info.get("duration_hours", 8) * 3600)
+                                if flight_info.get("duration_hours")
                                 else choice.features.travel_seconds
                             )
-                            
+
+                            # Log RAG data usage
+                            print(f"  ✓ Using RAG data: {airline} ${price_cents/100:.2f}")
+
                             # Use matching flight's details if available, otherwise create from RAG/choice
                             if matching_flight:
+                                print(f"  ✓ Hybrid: RAG airline + Fixture details ({matching_flight.origin}->{matching_flight.dest})")
                                 flight_id = f"{airline} {matching_flight.flight_id.split()[-1]}"
                                 origin = matching_flight.origin
                                 dest = matching_flight.dest
@@ -824,14 +925,15 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
                                 overnight = matching_flight.overnight
                             else:
                                 # Create from scratch using RAG + choice data
+                                print(f"  ⚠️  RAG-ONLY: Creating flight without fixture match")
                                 flight_id = f"{airline} {choice.option_ref}"
                                 origin = flight_info.get("origin_airport") or (state.intent.airports[0] if state.intent.airports else "JFK")
                                 dest = flight_info.get("dest_airport") or "GIG"  # Default destination
-                                
+
                                 # Create reasonable departure/arrival times based on choice window
                                 departure = datetime.combine(
-                                    day_plan.date, 
-                                    slot.window.start, 
+                                    day_plan.date,
+                                    slot.window.start,
                                     tzinfo=UTC
                                 )
                                 arrival = departure + timedelta(seconds=duration_seconds)
@@ -858,11 +960,13 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
 
                         elif matching_flight:
                             # Use fixture flight data
+                            print(f"  ✓ Fixture-only: {matching_flight.flight_id} ${matching_flight.price_usd_cents/100:.2f}")
                             flight = matching_flight
                             flight.provenance.source = "fixture"
-                            
+
                         else:
                             # Fallback: create basic flight from choice features
+                            print(f"  ⚠️  FALLBACK: Creating flight from planner estimates")
                             flight = FlightOption(
                                 flight_id=f"Fallback {choice.option_ref}",
                                 origin=state.intent.airports[0] if state.intent.airports else "JFK",
@@ -897,7 +1001,22 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
 
     state.tool_call_counts["flights"] = flight_count
 
-    # Fetch real lodging data using adapter with budget-aware selection
+    # Log final flight inventory
+    print(f"\n" + "="*60)
+    print(f"FINAL FLIGHT INVENTORY: {len(state.flights)} flights")
+    print("="*60)
+    for flight_id, flight in state.flights.items():
+        print(f"  {flight_id}")
+        print(f"    Route: {flight.origin} → {flight.dest}")
+        print(f"    Price: ${flight.price_usd_cents / 100:.2f}")
+        print(f"    Source: {flight.provenance.source}")
+    print("="*60 + "\n")
+
+    # Extract lodging info from RAG chunks FIRST
+    lodging_keywords = _extract_lodging_info_from_rag(state.rag_chunks)
+
+    # Fetch lodging data using adapter with budget-aware selection
+    # Pass RAG data to generate lodging directly from RAG instead of fixtures
     from backend.app.adapters.lodging import get_lodging
     tier_prefs = preferred_lodging_tiers(budget_profile)
 
@@ -907,45 +1026,38 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
         checkout=state.intent.date_window.end,
         tier_prefs=tier_prefs,
         budget_usd_cents=state.intent.budget_usd_cents,
+        rag_lodging_data=lodging_keywords,  # Pass RAG data to adapter
     )
 
-    # Extract lodging info from RAG chunks to enrich with real names
-    lodging_keywords = _extract_lodging_info_from_rag(state.rag_chunks)
+    # Log RAG lodging keywords availability
+    print(f"\n🏨 RAG Lodging Keywords Available: {len(lodging_keywords)} options")
+    if lodging_keywords:
+        print("Available RAG lodging:")
+        for idx, info in lodging_keywords.items():
+            print(f"  [{idx}] {info.get('name')} ({info.get('tier')}) - ${info.get('price_per_night_usd_cents', 0)/100:.2f}/night")
 
-    # Populate state.lodgings dictionary and enrich with RAG data
+    # Populate state.lodgings dictionary directly from RAG-generated options
+    # No enrichment needed since lodging was created from RAG data
     for idx, lodging in enumerate(lodging_options):
-        # Try to match RAG lodging by tier
-        matching_rag = None
-        if lodging_keywords:
-            try:
-                # Find RAG lodging with matching tier
-                for rag_idx, rag_info in lodging_keywords.items():
-                    rag_tier = rag_info.get("tier", "").lower()
-                    # Safely access tier value
-                    if hasattr(lodging.tier, 'value'):
-                        lodging_tier = lodging.tier.value.lower()
-                    else:
-                        lodging_tier = str(lodging.tier).lower()
-
-                    # Match tiers (handle mid/mid-range variations)
-                    if rag_tier == lodging_tier or (rag_tier == "mid-range" and lodging_tier == "mid"):
-                        # Check if this RAG lodging hasn't been used yet
-                        if not any(l.name == rag_info.get("name") for l in state.lodgings.values()):
-                            matching_rag = rag_info
-                            break
-            except (AttributeError, TypeError) as e:
-                print(f"Warning: Error matching lodging tier for {lodging.name}: {e}")
-                pass
-
-        # If we have RAG data, use it to enrich the lodging
-        if matching_rag:
-            lodging.name = matching_rag.get("name") or lodging.name
-            # Use RAG-estimated price if available
-            if matching_rag.get("price_per_night_usd_cents"):
-                lodging.price_per_night_usd_cents = matching_rag["price_per_night_usd_cents"]
+        tier_display = lodging.tier.value if hasattr(lodging.tier, 'value') else str(lodging.tier)
+        print(f"\n🏨 Processing lodging option {idx}: {lodging.name} ({tier_display})")
+        print(f"  ✓ RAG-based lodging: ${lodging.price_per_night_usd_cents/100:.2f}/night")
+        print(f"  Source: {lodging.provenance.source}")
 
         state.lodgings[lodging.lodging_id] = lodging
     state.tool_call_counts["lodging"] = len(lodging_options)
+
+    # Log final lodging inventory
+    print(f"\n" + "="*60)
+    print(f"FINAL LODGING INVENTORY: {len(state.lodgings)} options")
+    print("="*60)
+    for lodging_id, lodging in state.lodgings.items():
+        tier = lodging.tier.value if hasattr(lodging.tier, 'value') else str(lodging.tier)
+        print(f"  {lodging.name} ({tier})")
+        print(f"    Price: ${lodging.price_per_night_usd_cents / 100:.2f}/night")
+        print(f"    Location: {lodging.geo.lat:.4f}, {lodging.geo.lon:.4f}" if lodging.geo else "    Location: N/A")
+        print(f"    Source: {lodging.provenance.source}")
+    print("="*60 + "\n")
 
     # Simulate FX tool call
     state.tool_call_counts["fx"] = 1
@@ -955,6 +1067,14 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
     attraction_count = 0
     rag_keywords = _extract_venue_info_from_rag(state.rag_chunks)
 
+    # Log RAG attractions availability
+    print(f"\n🎭 RAG Attractions Keywords Available: {len(rag_keywords)} venues")
+    if rag_keywords:
+        print("Available RAG attractions:")
+        for idx, info in rag_keywords.items():
+            cost_display = f"${info.get('cost_usd_cents', 0)/100:.2f}" if info.get('cost_usd_cents') else "Free"
+            print(f"  [{idx}] {info.get('name')} ({info.get('type')}) - {cost_display}")
+
     for day_plan in state.plan.days:
         for slot in day_plan.slots:
             for choice in slot.choices:
@@ -962,8 +1082,13 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
                     choice.kind == ChoiceKind.attraction
                     and choice.option_ref not in state.attractions
                 ):
+                    print(f"\n🎭 Processing attraction: {choice.option_ref}")
+
                     # Try to extract venue info from RAG chunks
                     venue_info = rag_keywords.get(attraction_count % len(rag_keywords)) if rag_keywords else None
+
+                    if venue_info:
+                        print(f"  → Matched to RAG attraction: {venue_info.get('name')}")
 
                     # Use RAG data if available, otherwise fall back to stub
                     if venue_info:
@@ -972,11 +1097,15 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
                         name = venue_info.get("name") or f"Attraction {choice.option_ref}"
                         # Use cost from RAG extraction if available, otherwise use plan's cost
                         cost_usd_cents = venue_info.get("cost_usd_cents") or choice.features.cost_usd_cents
+                        print(f"  ✓ Using RAG data: {name} ({venue_type})")
+                        cost_display = f"${cost_usd_cents/100:.2f}" if cost_usd_cents else "Free"
+                        print(f"    Cost: {cost_display}, Indoor: {indoor}")
                     else:
                         venue_type = "museum"
                         indoor = choice.features.indoor if choice.features.indoor is not None else True
                         name = f"Attraction {choice.option_ref}"
                         cost_usd_cents = choice.features.cost_usd_cents
+                        print(f"  ⚠️  Fallback: Using planner estimate")
 
                     state.attractions[choice.option_ref] = Attraction(
                         id=choice.option_ref,
@@ -1001,10 +1130,31 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
 
     state.tool_call_counts["attractions"] = attraction_count
 
+    # Log final attractions inventory
+    print(f"\n" + "="*60)
+    print(f"FINAL ATTRACTIONS INVENTORY: {len(state.attractions)} venues")
+    print("="*60)
+    for attr_id, attr in state.attractions.items():
+        cost_display = f"${attr.est_price_usd_cents/100:.2f}" if attr.est_price_usd_cents else "Free"
+        print(f"  {attr.name} ({attr.venue_type})")
+        print(f"    Cost: {cost_display}")
+        print(f"    Indoor: {attr.indoor}")
+    print("="*60 + "\n")
+
     # Populate transit legs and enrich with RAG data
     transit_keywords = _extract_transit_info_from_rag(state.rag_chunks)
     transit_keyword_items = list(transit_keywords.items())
     transit_count = 0
+
+    # Log RAG transit availability
+    print(f"\n🚇 RAG Transit Keywords Available: {len(transit_keywords)} options")
+    if transit_keywords:
+        print("Available RAG transit:")
+        for idx, info in transit_keywords.items():
+            route = info.get('route_name', 'Unknown route')
+            mode = info.get('mode', 'unknown')
+            cost_display = f"${info.get('price_usd_cents', 0)/100:.2f}" if info.get('price_usd_cents') else "N/A"
+            print(f"  [{idx}] {route} ({mode}) - {cost_display}")
 
     for day_plan in state.plan.days:
         for slot in day_plan.slots:
@@ -1013,6 +1163,8 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
                     choice.kind == ChoiceKind.transit
                     and choice.option_ref not in state.transit_legs
                 ):
+                    print(f"\n🚇 Processing transit: {choice.option_ref}")
+
                     from backend.app.adapters.transit import get_transit_leg
 
                     # Extract location data from the choice
@@ -1043,6 +1195,9 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
                                 transit_count % len(transit_keyword_items)
                             ]
 
+                    if matching_rag:
+                        print(f"  → Matched to RAG transit: {matching_rag.get('route_name')} ({matching_rag.get('mode')})")
+
                     # Override mode with RAG data if available
                     if matching_rag and matching_rag.get("mode"):
                         normalized_mode = _normalize_transit_mode(matching_rag.get("mode"))
@@ -1060,6 +1215,7 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
 
                     # Enrich transit leg and slot features with RAG data if available
                     if matching_rag:
+                        print(f"  ✓ Enriching with RAG data:")
                         price_cents = matching_rag.get("price_usd_cents")
                         duration_seconds = matching_rag.get("duration_seconds")
                         route_name = matching_rag.get("route_name")
@@ -1069,30 +1225,49 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
                             transit_leg.price_usd_cents = price_cents
                             if choice.features:
                                 choice.features.cost_usd_cents = price_cents
+                            print(f"    Price: ${price_cents/100:.2f}")
 
                         if duration_seconds is not None:
                             transit_leg.duration_seconds = duration_seconds
                             if choice.features:
                                 choice.features.travel_seconds = duration_seconds
+                            print(f"    Duration: ~{duration_seconds // 60} min")
 
                         if route_name:
                             transit_leg.route_name = route_name
+                            print(f"    Route: {route_name}")
                         if neighborhoods:
                             if isinstance(neighborhoods, list):
                                 transit_leg.neighborhoods = neighborhoods
                             else:
                                 transit_leg.neighborhoods = [str(neighborhoods)]
+                            print(f"    Areas: {', '.join(neighborhoods[:2]) if isinstance(neighborhoods, list) else neighborhoods}")
 
                         transit_leg.provenance.source = "fixture+rag"
                         if matching_rag_idx is not None:
                             transit_leg.provenance.ref_id = (
                                 f"enriched:{transit_leg.provenance.ref_id}:{matching_rag_idx}"
                             )
+                    else:
+                        print(f"  ✓ Using fixture-only transit")
 
                     state.transit_legs[choice.option_ref] = transit_leg
                     transit_count += 1
 
     state.tool_call_counts["transit"] = transit_count
+
+    # Log final transit inventory
+    print(f"\n" + "="*60)
+    print(f"FINAL TRANSIT INVENTORY: {len(state.transit_legs)} legs")
+    print("="*60)
+    for leg_id, leg in state.transit_legs.items():
+        route_display = getattr(leg, 'route_name', 'Unknown route')
+        print(f"  {route_display} ({leg.mode.value})")
+        cost_display = f"${leg.price_usd_cents/100:.2f}" if hasattr(leg, 'price_usd_cents') and leg.price_usd_cents else "N/A"
+        print(f"    Cost: {cost_display}")
+        print(f"    Duration: ~{leg.duration_seconds // 60} min")
+        print(f"    Source: {leg.provenance.source}")
+    print("="*60 + "\n")
 
     state.messages.append(f"Executed {sum(state.tool_call_counts.values())} tool calls")
     state.last_event_ts = datetime.now(UTC)
