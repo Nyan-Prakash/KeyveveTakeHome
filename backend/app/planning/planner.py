@@ -33,7 +33,7 @@ from backend.app.planning.transit_injector import inject_transit_between_activit
 logger = logging.getLogger(__name__)
 
 
-def build_candidate_plans(intent: IntentV1) -> Sequence[PlanV1]:
+def build_candidate_plans(intent: IntentV1, rag_attractions: list | None = None) -> Sequence[PlanV1]:
     """
     Generate 1-4 candidate plans based on the intent.
 
@@ -48,6 +48,7 @@ def build_candidate_plans(intent: IntentV1) -> Sequence[PlanV1]:
 
     Args:
         intent: User intent containing preferences and constraints
+        rag_attractions: List of actual attractions from RAG database (if available)
 
     Returns:
         List of 1-4 candidate PlanV1 objects
@@ -69,20 +70,20 @@ def build_candidate_plans(intent: IntentV1) -> Sequence[PlanV1]:
     plans: list[PlanV1] = []
 
     # Plan 1: Cost-conscious
-    plans.append(_build_cost_conscious_plan(intent, trip_days, rng, budget_profile))
+    plans.append(_build_cost_conscious_plan(intent, trip_days, rng, budget_profile, rag_attractions))
 
     # Only add more plans if budget allows for alternatives
     if intent.budget_usd_cents > 100_000:  # More than $1000
         # Plan 2: Convenience-focused
-        plans.append(_build_convenience_plan(intent, trip_days, rng, budget_profile))
+        plans.append(_build_convenience_plan(intent, trip_days, rng, budget_profile, rag_attractions))
 
         if intent.budget_usd_cents > 200_000:  # More than $2000
             # Plan 3: Experience-focused
-            plans.append(_build_experience_plan(intent, trip_days, rng, budget_profile))
+            plans.append(_build_experience_plan(intent, trip_days, rng, budget_profile, rag_attractions))
 
             if len(intent.prefs.themes or []) > 1:  # Multiple interests
                 # Plan 4: Relaxed/varied
-                plans.append(_build_relaxed_plan(intent, trip_days, rng, budget_profile))
+                plans.append(_build_relaxed_plan(intent, trip_days, rng, budget_profile, rag_attractions))
 
     return plans[:4]  # Ensure fan-out cap
 
@@ -109,6 +110,7 @@ def _build_cost_conscious_plan(
     trip_days: int,
     rng: random.Random,
     budget_profile: BudgetProfile,
+    rag_attractions: list | None = None,
 ) -> PlanV1:
     """Build a cost-conscious plan emphasizing budget-friendly options."""
     base_multiplier = 0.7
@@ -121,6 +123,7 @@ def _build_cost_conscious_plan(
         activity_density=0.8,  # Slightly fewer activities
         variant_name="cost_conscious",
         budget_profile=budget_profile,
+        rag_attractions=rag_attractions,
     )
 
 
@@ -129,6 +132,7 @@ def _build_convenience_plan(
     trip_days: int,
     rng: random.Random,
     budget_profile: BudgetProfile,
+    rag_attractions: list | None = None,
 ) -> PlanV1:
     """Build a convenience-focused plan emphasizing shorter travel times."""
     base_multiplier = 1.0
@@ -141,6 +145,7 @@ def _build_convenience_plan(
         activity_density=1.0,  # Normal activity count
         variant_name="convenience",
         budget_profile=budget_profile,
+        rag_attractions=rag_attractions,
     )
 
 
@@ -149,6 +154,7 @@ def _build_experience_plan(
     trip_days: int,
     rng: random.Random,
     budget_profile: BudgetProfile,
+    rag_attractions: list | None = None,
 ) -> PlanV1:
     """Build an experience-focused plan with premium activities."""
     base_multiplier = 1.3
@@ -161,6 +167,7 @@ def _build_experience_plan(
         activity_density=1.1,  # More activities
         variant_name="experience",
         budget_profile=budget_profile,
+        rag_attractions=rag_attractions,
     )
 
 
@@ -169,6 +176,7 @@ def _build_relaxed_plan(
     trip_days: int,
     rng: random.Random,
     budget_profile: BudgetProfile,
+    rag_attractions: list | None = None,
 ) -> PlanV1:
     """Build a relaxed plan with more free time."""
     base_multiplier = 0.9
@@ -181,6 +189,7 @@ def _build_relaxed_plan(
         activity_density=0.6,  # Fewer activities, more free time
         variant_name="relaxed",
         budget_profile=budget_profile,
+        rag_attractions=rag_attractions,
     )
 
 
@@ -192,6 +201,7 @@ def _build_plan_variant(
     activity_density: float,
     variant_name: str,
     budget_profile: BudgetProfile,
+    rag_attractions: list | None = None,
 ) -> PlanV1:
     """Build a plan variant with specific characteristics."""
     start_date = intent.date_window.start
@@ -291,6 +301,7 @@ def _build_plan_variant(
                 variant_name,
                 intent,
                 budget_profile,
+                rag_attractions,
             )
             slots.append(Slot(
                 window=TimeWindow(start=time(9, 0), end=time(12, 0)),
@@ -309,6 +320,7 @@ def _build_plan_variant(
                 variant_name,
                 intent,
                 budget_profile,
+                rag_attractions,
             )
             slots.append(Slot(
                 window=TimeWindow(start=time(14, 0), end=time(17, 0)),
@@ -328,6 +340,7 @@ def _build_plan_variant(
                 variant_name,
                 intent,
                 budget_profile,
+                rag_attractions,
             )
             slots.append(Slot(
                 window=TimeWindow(start=time(19, 0), end=time(21, 0)),
@@ -415,8 +428,13 @@ def _create_activity_choice(
     variant_name: str,
     intent: IntentV1,
     budget_profile: BudgetProfile,
+    rag_attractions: list | None = None,
 ) -> Choice:
-    """Create an activity choice for a specific time period."""
+    """Create an activity choice for a specific time period.
+
+    If RAG attractions are available, selects from real attractions.
+    Otherwise, creates abstract slot with estimated costs.
+    """
 
     # Determine activity type based on period and variant
     if period == "morning":
@@ -452,6 +470,45 @@ def _create_activity_choice(
     else:
         indoor = rng.choice([True, None])  # Mostly indoor/unknown
 
+    # If RAG attractions available and this is an attraction, try to use real data
+    if rag_attractions and kind == ChoiceKind.attraction:
+        # Filter attractions by budget compatibility (within ±50% of target cost)
+        budget_compatible = [
+            attr for attr in rag_attractions
+            if attr.est_price_usd_cents is not None and
+            abs(attr.est_price_usd_cents - final_cost) / max(final_cost, 1) < 0.5
+        ] or rag_attractions  # Fallback to all if none match budget
+
+        # Filter by indoor/outdoor preference if specified
+        if indoor is not None:
+            preference_match = [
+                attr for attr in budget_compatible
+                if attr.indoor == indoor
+            ]
+            if preference_match:
+                budget_compatible = preference_match
+
+        # Select a random attraction from compatible options
+        if budget_compatible:
+            selected_attraction = rng.choice(budget_compatible)
+            return Choice(
+                kind=kind,
+                option_ref=selected_attraction.id,  # Use RAG attraction ID
+                features=ChoiceFeatures(
+                    cost_usd_cents=selected_attraction.est_price_usd_cents or final_cost,
+                    travel_seconds=rng.randint(900, 2400),  # 15-40 minutes travel
+                    indoor=selected_attraction.indoor,
+                    themes=themes,  # Keep user themes for scoring
+                ),
+                score=rng.uniform(0.6, 0.9),
+                provenance=Provenance(
+                    source="planner+rag",
+                    ref_id=f"planner:rag:{selected_attraction.id}",
+                    fetched_at=datetime.now(UTC),
+                ),
+            )
+
+    # Fallback: Create abstract slot with estimated costs (when RAG not available or for meals)
     return Choice(
         kind=kind,
         option_ref=f"{variant_name}_{day_offset}_{period}",
@@ -479,24 +536,37 @@ def _lodging_tier_from_cost(cost_cents: int) -> str:
 
 
 def _enforce_budget(plan: PlanV1, intent: IntentV1) -> PlanV1:
-    """Scale plan costs down if the estimated total exceeds the user's budget."""
+    """
+    Scale plan costs to better utilize the budget.
+
+    Now targets 95-100% of budget (with 10% slippage allowed in verifier).
+    Previously only ensured costs were under budget, often ending at 85%.
+    """
     target_budget = max(intent.budget_usd_cents, 0)
+    # Target 97.5% of budget to leave room for 10% slippage verification (97.5% * 1.10 = 107.25%)
+    target_utilization = int(target_budget * 0.975)
 
     for iteration in range(3):
         total_cost = _estimate_plan_cost(plan)
-        if total_cost <= target_budget:
+
+        # Check if we're in the acceptable range (95-100% of budget)
+        if 0.95 * target_budget <= total_cost <= target_budget:
             return plan
 
-        scale_factor = target_budget / max(total_cost, 1)
-        scale_factor = max(0.0, min(scale_factor, 1.0))
+        # Scale to hit target utilization
+        scale_factor = target_utilization / max(total_cost, 1)
+        # Allow both scaling down (over budget) and scaling up (under-utilizing)
+        scale_factor = max(0.7, min(scale_factor, 1.3))
 
         logger.info(
-            "Scaling plan costs to fit budget",
+            "Scaling plan costs to better utilize budget",
             extra={
                 "iteration": iteration,
                 "total_cost_before_cents": total_cost,
                 "target_budget_cents": target_budget,
+                "target_utilization_cents": target_utilization,
                 "scale_factor": scale_factor,
+                "utilization_pct": (total_cost / target_budget * 100) if target_budget > 0 else 0,
             },
         )
 

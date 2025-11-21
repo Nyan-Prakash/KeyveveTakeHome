@@ -34,6 +34,8 @@ from backend.app.planning.budget_utils import (
     build_budget_profile,
     preferred_flight_tiers,
     preferred_lodging_tiers,
+    target_flight_cost,
+    target_lodging_cost,
 )
 from backend.app.planning.types import BranchFeatures
 from backend.app.planning.simple_transit import simple_inject_transit
@@ -66,81 +68,111 @@ For each attraction, extract:
 - name: The full name of the attraction
 - type: Category (museum, park, garden, palace, temple, restaurant, market, theater, beach, mountain, or attraction)
 - indoor: Whether it's primarily indoor (true), outdoor (false), or unknown (null)
-- cost_usd: Entry cost in USD (extract from text like "Adults $15" or "Adults €13"). If a range like "$13-18", use the lower value. Return null if not mentioned or free.
-
+- price_usd: Price in USD (extract from text like "Attraction Name: 180" or "Attraction Name**: 400"). Return the exact number found.
 Text:
 {combined_text}
 
 Return a JSON array of attractions. Example format:
 [
-  {{"name": "Prado Museum", "type": "museum", "indoor": true, "cost_usd": 15.0}},
-  {{"name": "Retiro Park", "type": "park", "indoor": false, "cost_usd": null}}
+  {{"name": "Prado Museum", "type": "museum", "indoor": true, "price_usd": 15.0}},
+  {{"name": "Retiro Park", "type": "park", "indoor": false, "price_usd": null}}
 ]
 
 IMPORTANT: Only extract entries that are clearly identifiable attractions with proper names, not general categories or descriptions."""
 
-    try:
-        client = OpenAI(api_key=get_openai_api_key())
+    max_retries = 2
+    for attempt in range(max_retries):
+        try:
+            client = OpenAI(api_key=get_openai_api_key())
 
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",  # Use faster, cheaper model for extraction
-            messages=[
-                {"role": "system", "content": "You are a precise data extractor. Return only valid JSON arrays."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.0,  # Deterministic extraction
-            max_tokens=2000
-        )
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",  # Use faster, cheaper model for extraction
+                messages=[
+                    {"role": "system", "content": "You are a precise data extractor. Return only valid JSON arrays."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.0,  # Deterministic extraction
+                max_tokens=2000
+            )
 
-        content = response.choices[0].message.content
-        # Extract JSON from markdown code blocks if present
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0].strip()
-        elif "```" in content:
-            content = content.split("```")[1].split("```")[0].strip()
+            content = response.choices[0].message.content
+            # Extract JSON from markdown code blocks if present
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
 
-        attractions = json.loads(content)
+            attractions = json.loads(content)
 
-        # Convert to the expected format
-        venue_info_map = {}
-        indoor_by_type = {
-            "temple": None,
-            "garden": False,
-            "museum": True,
-            "restaurant": True,
-            "market": None,
-            "theater": True,
-            "castle": None,
-            "palace": None,
-            "beach": False,
-            "mountain": False,
-            "park": False,
-        }
+            # Validate that result is a list
+            if not isinstance(attractions, list):
+                raise ValueError(f"Expected list, got {type(attractions)}")
 
-        for idx, attr in enumerate(attractions):
-            venue_type = attr.get("type", "attraction")
-            indoor = attr.get("indoor")
-            if indoor is None:
-                indoor = indoor_by_type.get(venue_type)
-
-            # Convert cost to cents
-            cost_usd_cents = None
-            if attr.get("cost_usd") is not None:
-                cost_usd_cents = int(attr["cost_usd"] * 100)
-
-            venue_info_map[idx] = {
-                "name": attr.get("name"),
-                "type": venue_type,
-                "indoor": indoor,
-                "cost_usd_cents": cost_usd_cents,
+            # Convert to the expected format
+            venue_info_map = {}
+            indoor_by_type = {
+                "temple": None,
+                "garden": False,
+                "museum": True,
+                "restaurant": True,
+                "market": None,
+                "theater": True,
+                "castle": None,
+                "palace": None,
+                "beach": False,
+                "mountain": False,
+                "park": False,
             }
 
-        return venue_info_map
+            for idx, attr in enumerate(attractions):
+                # Validate required fields
+                if not isinstance(attr, dict):
+                    continue
+                if not attr.get("name"):
+                    continue
 
-    except Exception as e:
-        # Fallback to empty dict if LLM extraction fails
-        print(f"Warning: LLM extraction failed: {e}. Using empty venue map.")
-        return {}
+                venue_type = attr.get("type", "attraction")
+                indoor = attr.get("indoor")
+                if indoor is None:
+                    indoor = indoor_by_type.get(venue_type)
+
+                # Convert cost to cents
+                cost_usd_cents = None
+                if attr.get("price_usd") is not None:
+                    try:
+                        cost_usd_cents = int(float(attr["price_usd"]) * 100)
+                    except (ValueError, TypeError):
+                        pass
+
+                venue_info_map[idx] = {
+                    "name": attr.get("name"),
+                    "type": venue_type,
+                    "indoor": indoor,
+                    "cost_usd_cents": cost_usd_cents,
+                }
+
+            # Success - return results
+            if venue_info_map:
+                return venue_info_map
+            elif attempt < max_retries - 1:
+                print(f"Warning: LLM extraction returned empty results. Retrying ({attempt + 1}/{max_retries})...")
+                continue
+            else:
+                print("Warning: LLM extraction returned no valid venues after retries.")
+                return {}
+
+        except json.JSONDecodeError as e:
+            print(f"Warning: JSON parsing failed (attempt {attempt + 1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                continue
+        except Exception as e:
+            print(f"Warning: LLM extraction failed (attempt {attempt + 1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                continue
+
+    # All retries exhausted - return empty dict
+    print("Error: All RAG extraction attempts failed. Using empty venue map.")
+    return {}
 
     # Log extraction results
     print("\n" + "="*60)
@@ -265,6 +297,86 @@ IMPORTANT: Only extract entries that are clearly identifiable airlines or flight
     print("="*60 + "\n")
 
     return flight_info_map
+
+
+def _match_rag_attraction_to_choice(
+    choice: Choice,
+    rag_attractions: list,
+    used_attraction_ids: set[str],
+) -> "Attraction | None":
+    """Match a plan choice to the best RAG attraction using semantic scoring.
+
+    Args:
+        choice: The planner's Choice object with estimated cost and themes
+        rag_attractions: List of Attraction objects from RAG database
+        used_attraction_ids: Set of attraction IDs already assigned (to avoid duplicates)
+
+    Returns:
+        Best matching Attraction or None if no good match exists
+    """
+    if not rag_attractions or choice.kind != ChoiceKind.attraction:
+        return None
+
+    # If choice.option_ref already points to a RAG attraction ID, use it directly
+    matching_attr = next(
+        (attr for attr in rag_attractions if attr.id == choice.option_ref and attr.id not in used_attraction_ids),
+        None
+    )
+    if matching_attr:
+        return matching_attr
+
+    # Otherwise, score available attractions
+    target_cost = choice.features.cost_usd_cents
+    target_indoor = choice.features.indoor
+    target_themes = set(choice.features.themes or [])
+
+    best_score = -1
+    best_attraction = None
+
+    for attraction in rag_attractions:
+        # Skip already-used attractions
+        if attraction.id in used_attraction_ids:
+            continue
+
+        score = 0.0
+
+        # Cost compatibility (40% weight): Prefer attractions within ±30% of target
+        if attraction.est_price_usd_cents is not None and target_cost > 0:
+            cost_diff = abs(attraction.est_price_usd_cents - target_cost) / target_cost
+            if cost_diff < 0.3:
+                score += 0.4 * (1.0 - cost_diff / 0.3)
+            elif cost_diff < 0.6:
+                score += 0.2 * (1.0 - (cost_diff - 0.3) / 0.3)
+        elif attraction.est_price_usd_cents == 0 and target_cost == 0:
+            score += 0.4  # Both free
+
+        # Indoor/outdoor match (20% weight)
+        if target_indoor is not None and attraction.indoor is not None:
+            if attraction.indoor == target_indoor:
+                score += 0.2
+
+        # Theme overlap (20% weight): Match attraction type to user themes
+        if attraction.venue_type and target_themes:
+            venue_type_lower = attraction.venue_type.lower()
+            theme_matches = sum(
+                1 for theme in target_themes
+                if theme.lower() in venue_type_lower or venue_type_lower in theme.lower()
+            )
+            if theme_matches > 0:
+                score += 0.2 * min(theme_matches / len(target_themes), 1.0)
+
+        # Availability bonus (20% weight): Prefer attractions not yet used
+        score += 0.2
+
+        if score > best_score:
+            best_score = score
+            best_attraction = attraction
+
+    # Return best match only if score is reasonable (>0.3)
+    if best_score > 0.3:
+        return best_attraction
+
+    return None
 
 
 def _normalize_transit_mode(mode: str | None) -> str | None:
@@ -593,12 +705,13 @@ def planner_node(state: OrchestratorState) -> OrchestratorState:
 
     Replaces the PR4 stub implementation with real planning logic
     that generates 1-4 candidate plans with bounded fan-out.
+    Now uses RAG attractions when available to prevent hallucinations.
     """
     state.messages.append("Planning itinerary...")
     state.last_event_ts = datetime.now(UTC)
 
-    # Generate candidate plans using PR6 logic
-    candidate_plans = build_candidate_plans(state.intent)
+    # Generate candidate plans using PR6 logic with RAG attractions
+    candidate_plans = build_candidate_plans(state.intent, state.rag_attractions)
 
     # Inject transit between activities for all candidate plans
     state.messages.append("Injecting transit between activities...")
@@ -753,9 +866,10 @@ def rag_node(state: OrchestratorState) -> OrchestratorState:
     """Retrieve relevant knowledge chunks from RAG for the destination.
 
     This node queries the embedding table for knowledge chunks related to
-    the destination city, which will be used to enrich attraction data.
+    the destination city, parses attractions, and makes them available to the planner.
     """
     from backend.app.graph.rag import retrieve_knowledge_for_destination
+    from backend.app.models.common import Geo, Provenance
 
     state.messages.append("Retrieving local knowledge...")
     state.last_event_ts = datetime.now(UTC)
@@ -770,9 +884,69 @@ def rag_node(state: OrchestratorState) -> OrchestratorState:
         state.rag_chunks = chunks
         state.messages.append(f"Retrieved {len(chunks)} knowledge chunks for {city}")
         state.tool_call_counts["rag"] = len(chunks)
+
+        # Parse attractions from RAG chunks immediately for planner use
+        venue_info_map = _extract_venue_info_from_rag(chunks)
+
+        if venue_info_map:
+            # Convert parsed venue data to Attraction objects
+            from backend.app.models.tool_results import Attraction
+
+            for idx, venue_info in venue_info_map.items():
+                # Only include attractions with valid names
+                if not venue_info.get("name"):
+                    continue
+
+                attraction = Attraction(
+                    id=f"rag_attraction_{idx}",
+                    name=venue_info["name"],
+                    venue_type=venue_info.get("type", "attraction"),
+                    indoor=venue_info.get("indoor"),
+                    kid_friendly=False,  # Not extractable from RAG currently
+                    opening_hours={
+                        "0": [], "1": [], "2": [], "3": [], "4": [], "5": [], "6": []
+                    },
+                    location=Geo(lat=48.8566, lon=2.3522),  # Default, will be enriched later
+                    est_price_usd_cents=venue_info.get("cost_usd_cents"),
+                    provenance=Provenance(
+                        source="rag",
+                        ref_id=f"rag:attraction:{idx}",
+                        source_url="rag://attractions",
+                        fetched_at=datetime.now(UTC),
+                        cache_hit=False,
+                        response_digest=None,
+                    ),
+                )
+                state.rag_attractions.append(attraction)
+
+            state.messages.append(f"Parsed {len(state.rag_attractions)} attractions from RAG")
+
+            # Validate sufficient attractions for trip planning
+            # Estimate number of attraction slots needed: ~2 per day
+            trip_days = (state.intent.date_window.end - state.intent.date_window.start).days
+            estimated_attraction_slots = trip_days * 2
+
+            if len(state.rag_attractions) < estimated_attraction_slots // 2:
+                state.messages.append(
+                    f"⚠️  WARNING: Only {len(state.rag_attractions)} attractions found, "
+                    f"but trip needs ~{estimated_attraction_slots} slots. "
+                    "Some attractions may be repeated or synthetic fallbacks may be used."
+                )
+        else:
+            state.messages.append("Warning: Failed to extract attractions from RAG chunks")
+            state.rag_attractions = []
     else:
         state.messages.append(f"No local knowledge found for {city}")
         state.rag_chunks = []
+        state.rag_attractions = []
+
+    # CRITICAL: Validate that we have SOME attractions from RAG
+    # If empty, the planner will create abstract slots that may fail validation
+    if not state.rag_attractions:
+        state.messages.append(
+            f"⚠️  CRITICAL: No attractions extracted from RAG for {city}. "
+            "Planner will create abstract slots that may require manual fallback."
+        )
 
     state.last_event_ts = datetime.now(UTC)
     return state
@@ -837,16 +1011,22 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
             weather_calls if weather_calls else len(state.plan.days)
         )
 
-    # Fetch real flight data using adapter with budget-aware selection
+    # Fetch real flight data using adapter with CONTINUOUS budget targeting
     from backend.app.adapters.flights import get_flights
+    from backend.app.planning.budget_utils import compute_price_range
+
+    # Calculate continuous target cost and price range for flights
+    flight_target_cost = target_flight_cost(budget_profile)
+    flight_price_range = compute_price_range(flight_target_cost, tolerance=0.3)
 
     flight_options = get_flights(
         origin=state.intent.airports[0] if state.intent.airports else "JFK",
         dest=state.intent.city or "Rio de Janeiro",  # Provide fallback destination
         date_window=(state.intent.date_window.start, state.intent.date_window.end),
         avoid_overnight=state.intent.prefs.avoid_overnight if state.intent.prefs else False,
-        tier_prefs=preferred_flight_tiers(budget_profile),
         budget_usd_cents=state.intent.budget_usd_cents,
+        target_price_cents=flight_target_cost,
+        price_range=flight_price_range,
     )
 
     # Process flight choices from plan and enrich with RAG data
@@ -1015,18 +1195,22 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
     # Extract lodging info from RAG chunks FIRST
     lodging_keywords = _extract_lodging_info_from_rag(state.rag_chunks)
 
-    # Fetch lodging data using adapter with budget-aware selection
+    # Fetch lodging data using adapter with CONTINUOUS budget targeting
     # Pass RAG data to generate lodging directly from RAG instead of fixtures
     from backend.app.adapters.lodging import get_lodging
-    tier_prefs = preferred_lodging_tiers(budget_profile)
+
+    # Calculate continuous target cost and price range for lodging
+    lodging_target_cost = target_lodging_cost(budget_profile)
+    lodging_price_range = compute_price_range(lodging_target_cost, tolerance=0.3)
 
     lodging_options = get_lodging(
         city=state.intent.city,
         checkin=state.intent.date_window.start,
         checkout=state.intent.date_window.end,
-        tier_prefs=tier_prefs,
         budget_usd_cents=state.intent.budget_usd_cents,
         rag_lodging_data=lodging_keywords,  # Pass RAG data to adapter
+        target_price_cents=lodging_target_cost,
+        price_range=lodging_price_range,
     )
 
     # Log RAG lodging keywords availability
@@ -1062,71 +1246,91 @@ def tool_exec_node(state: OrchestratorState) -> OrchestratorState:
     # Simulate FX tool call
     state.tool_call_counts["fx"] = 1
 
-    # Populate attractions from plan and track tool calls
-    # Use RAG chunks to enrich attraction data if available
+    # Populate attractions from plan using state.rag_attractions (already parsed)
+    # Use semantic matching instead of round-robin
     attraction_count = 0
-    rag_keywords = _extract_venue_info_from_rag(state.rag_chunks)
+    used_attraction_ids: set[str] = set()
 
     # Log RAG attractions availability
-    print(f"\n🎭 RAG Attractions Keywords Available: {len(rag_keywords)} venues")
-    if rag_keywords:
+    print(f"\n🎭 RAG Attractions Available: {len(state.rag_attractions)} venues")
+    if state.rag_attractions:
         print("Available RAG attractions:")
-        for idx, info in rag_keywords.items():
-            cost_display = f"${info.get('cost_usd_cents', 0)/100:.2f}" if info.get('cost_usd_cents') else "Free"
-            print(f"  [{idx}] {info.get('name')} ({info.get('type')}) - {cost_display}")
+        for attr in state.rag_attractions:
+            cost_display = f"${attr.est_price_usd_cents/100:.2f}" if attr.est_price_usd_cents else "Free"
+            print(f"  {attr.id}: {attr.name} ({attr.venue_type}) - {cost_display}")
 
     for day_plan in state.plan.days:
         for slot in day_plan.slots:
             for choice in slot.choices:
-                if (
-                    choice.kind == ChoiceKind.attraction
-                    and choice.option_ref not in state.attractions
-                ):
-                    print(f"\n🎭 Processing attraction: {choice.option_ref}")
+                if choice.kind == ChoiceKind.attraction:
+                    print(f"\n🎭 Processing attraction slot: {choice.option_ref}")
 
-                    # Try to extract venue info from RAG chunks
-                    venue_info = rag_keywords.get(attraction_count % len(rag_keywords)) if rag_keywords else None
+                    # Check if choice already references a RAG attraction from planner
+                    if choice.option_ref in [attr.id for attr in state.rag_attractions]:
+                        # Planner already selected RAG attraction - use it directly
+                        matched_attraction = next(
+                            attr for attr in state.rag_attractions if attr.id == choice.option_ref
+                        )
+                        print(f"  ✓ Planner selected: {matched_attraction.name}")
 
-                    if venue_info:
-                        print(f"  → Matched to RAG attraction: {venue_info.get('name')}")
+                        # Synchronize cost: Update choice.features with actual RAG cost
+                        if matched_attraction.est_price_usd_cents is not None:
+                            choice.features.cost_usd_cents = matched_attraction.est_price_usd_cents
 
-                    # Use RAG data if available, otherwise fall back to stub
-                    if venue_info:
-                        venue_type = venue_info.get("type", "attraction")
-                        indoor = venue_info.get("indoor", None)
-                        name = venue_info.get("name") or f"Attraction {choice.option_ref}"
-                        # Use cost from RAG extraction if available, otherwise use plan's cost
-                        cost_usd_cents = venue_info.get("cost_usd_cents") or choice.features.cost_usd_cents
-                        print(f"  ✓ Using RAG data: {name} ({venue_type})")
-                        cost_display = f"${cost_usd_cents/100:.2f}" if cost_usd_cents else "Free"
-                        print(f"    Cost: {cost_display}, Indoor: {indoor}")
-                    else:
-                        venue_type = "museum"
-                        indoor = choice.features.indoor if choice.features.indoor is not None else True
-                        name = f"Attraction {choice.option_ref}"
-                        cost_usd_cents = choice.features.cost_usd_cents
-                        print(f"  ⚠️  Fallback: Using planner estimate")
+                        # Store in state.attractions
+                        state.attractions[choice.option_ref] = matched_attraction
+                        used_attraction_ids.add(choice.option_ref)
+                        attraction_count += 1
 
-                    state.attractions[choice.option_ref] = Attraction(
-                        id=choice.option_ref,
-                        name=name,
-                        venue_type=venue_type,
-                        indoor=indoor,
-                        kid_friendly=False,
-                        opening_hours={
-                            "0": [],  # Monday
-                            "1": [],
-                            "2": [],
-                            "3": [],
-                            "4": [],
-                            "5": [],
-                            "6": [],
-                        },
-                        location=Geo(lat=48.8566, lon=2.3522),
-                        est_price_usd_cents=cost_usd_cents,
-                        provenance=choice.provenance,
-                    )
-                    attraction_count += 1
+                    elif choice.option_ref not in state.attractions:
+                        # Planner created abstract slot - try semantic matching
+                        matched_attraction = _match_rag_attraction_to_choice(
+                            choice,
+                            state.rag_attractions,
+                            used_attraction_ids,
+                        )
+
+                        if matched_attraction:
+                            print(f"  ✓ Semantic match: {matched_attraction.name}")
+                            print(f"    Score: Cost ${matched_attraction.est_price_usd_cents/100:.2f} vs target ${choice.features.cost_usd_cents/100:.2f}")
+
+                            # Synchronize cost: Update choice.features with actual RAG cost
+                            if matched_attraction.est_price_usd_cents is not None:
+                                choice.features.cost_usd_cents = matched_attraction.est_price_usd_cents
+
+                            # Store using matched attraction's ID
+                            state.attractions[matched_attraction.id] = matched_attraction
+                            # Update choice.option_ref to point to actual attraction
+                            choice.option_ref = matched_attraction.id
+                            used_attraction_ids.add(matched_attraction.id)
+                            attraction_count += 1
+                        else:
+                            # No suitable RAG match - this should fail validation
+                            print(f"  ⚠️  No suitable RAG attraction found for {choice.option_ref}")
+                            print(f"    Target cost: ${choice.features.cost_usd_cents/100:.2f}")
+                            print(f"    This plan will likely fail validation")
+
+                            # Create stub attraction to avoid crashing (will be caught by validation)
+                            stub_attraction = Attraction(
+                                id=choice.option_ref,
+                                name=f"[Missing] {choice.option_ref}",
+                                venue_type="attraction",
+                                indoor=choice.features.indoor,
+                                kid_friendly=False,
+                                opening_hours={
+                                    "0": [], "1": [], "2": [], "3": [], "4": [], "5": [], "6": []
+                                },
+                                location=Geo(lat=48.8566, lon=2.3522),
+                                est_price_usd_cents=choice.features.cost_usd_cents,
+                                provenance=Provenance(
+                                    source="fallback",
+                                    ref_id=f"fallback:{choice.option_ref}",
+                                    fetched_at=datetime.now(UTC),
+                                    cache_hit=False,
+                                ),
+                            )
+                            state.attractions[choice.option_ref] = stub_attraction
+                            attraction_count += 1
 
     state.tool_call_counts["attractions"] = attraction_count
 

@@ -149,7 +149,16 @@ def target_meal_cost(profile: BudgetProfile) -> int:
 
 
 def preferred_flight_tiers(profile: BudgetProfile, max_tiers: int = 3) -> list[str]:
-    """Return flight tier order closest to the target budget."""
+    """
+    [DEPRECATED] Return flight tier order closest to the target budget.
+
+    This function is deprecated in favor of continuous budget targeting using
+    target_flight_cost() + compute_price_range(). Kept for backward compatibility only.
+
+    Use instead:
+        target = target_flight_cost(profile)
+        price_range = compute_price_range(target)
+    """
     tier_order = _rank_by_target(target_flight_cost(profile), FLIGHT_TIER_BASE)
     # Always include budget tier for fallback
     ordered = []
@@ -164,7 +173,16 @@ def preferred_flight_tiers(profile: BudgetProfile, max_tiers: int = 3) -> list[s
 
 
 def preferred_lodging_tiers(profile: BudgetProfile, max_tiers: int = 3) -> list[Tier]:
-    """Return lodging tiers sorted by closeness to the target per-night spend."""
+    """
+    [DEPRECATED] Return lodging tiers sorted by closeness to the target per-night spend.
+
+    This function is deprecated in favor of continuous budget targeting using
+    target_lodging_cost() + compute_price_range(). Kept for backward compatibility only.
+
+    Use instead:
+        target = target_lodging_cost(profile)
+        price_range = compute_price_range(target)
+    """
     tier_order = _rank_by_target(target_lodging_cost(profile), LODGING_TIER_BASE)
     ordered: list[Tier] = []
     for tier in tier_order:
@@ -187,3 +205,64 @@ def cap_daily_spend(
     """Clamp daily discretionary spend so total trip cost stays under budget."""
     allowed = int(profile.budget_per_day_cents * max_daily_fraction)
     return max(min_daily_spend_cents, min(base_daily_spend_cents, allowed))
+
+
+def compute_price_range(
+    target_cents: int,
+    tolerance: float = 0.3,
+    *,
+    min_price: int | None = None,
+    max_price: int | None = None,
+) -> tuple[int, int]:
+    """
+    Compute a continuous price range around a target cost.
+
+    Args:
+        target_cents: Target price in cents
+        tolerance: Fractional tolerance (0.3 = ±30% of target)
+        min_price: Optional absolute minimum price
+        max_price: Optional absolute maximum price
+
+    Returns:
+        Tuple of (min_cents, max_cents) for filtering
+
+    Example:
+        target=$100, tolerance=0.3 → ($70, $130)
+    """
+    lower = int(target_cents * (1 - tolerance))
+    upper = int(target_cents * (1 + tolerance))
+
+    if min_price is not None:
+        lower = max(lower, min_price)
+    if max_price is not None:
+        upper = min(upper, max_price)
+
+    return (lower, upper)
+
+
+def infer_display_tier_from_flight_price(price_cents: int) -> str:
+    """
+    Infer display tier label from continuous flight price for UI purposes.
+
+    Maps price to nearest tier label without affecting selection logic.
+    Used only for display/logging, not for filtering.
+    """
+    distances = {
+        tier: abs(price_cents - base_price)
+        for tier, base_price in FLIGHT_TIER_BASE.items()
+    }
+    return min(distances, key=distances.get)
+
+
+def infer_display_tier_from_lodging_price(price_cents: int) -> Tier:
+    """
+    Infer display tier label from continuous lodging price for UI purposes.
+
+    Maps price to nearest tier enum without affecting selection logic.
+    Used only for display/logging, not for filtering.
+    """
+    distances = {
+        tier: abs(price_cents - base_price)
+        for tier, base_price in LODGING_TIER_BASE.items()
+    }
+    return min(distances, key=distances.get)

@@ -19,39 +19,51 @@ def get_lodging(
     tier_prefs: list[Tier] | None = None,
     budget_usd_cents: int | None = None,
     rag_lodging_data: dict[int, dict] | None = None,
+    target_price_cents: int | None = None,
+    price_range: tuple[int, int] | None = None,
 ) -> list[Lodging]:
     """
-    Get lodging options from RAG data with budget-aware tier selection.
+    Get lodging options from RAG data with continuous budget targeting.
 
     Args:
         city: City name
         checkin: Check-in date
         checkout: Check-out date
-        tier_prefs: Preferred tiers (budget, mid, luxury)
+        tier_prefs: [DEPRECATED] Preferred tiers (budget, mid, luxury)
         budget_usd_cents: Total trip budget for tier selection
         rag_lodging_data: Extracted lodging data from RAG chunks
+        target_price_cents: Target price per night (continuous targeting)
+        price_range: Tuple of (min_price, max_price) for filtering (continuous targeting)
 
     Returns:
         List of Lodging objects with provenance (≤4 options)
+
+    Note:
+        If target_price_cents and price_range are provided, they take precedence over tier_prefs.
+        This enables continuous budget targeting instead of discrete tier bands.
     """
-    # Determine tier preferences based on budget if not provided
-    if tier_prefs is None:
-        if budget_usd_cents:
-            # Calculate trip duration and budget per night
-            nights = max((checkout - checkin).days, 1)
-            trip_days = max(nights, 1)
-            budget_per_day = budget_usd_cents / trip_days
-            
-            if budget_per_day < 15000:  # Less than $150/day total budget
-                tier_prefs = [Tier.budget]  # Only budget lodging
-            elif budget_per_day < 30000:  # Less than $300/day total budget
-                tier_prefs = [Tier.budget, Tier.mid]  # Budget + mid-tier
-            elif budget_per_day < 60000:  # Less than $600/day total budget
-                tier_prefs = [Tier.mid, Tier.luxury]  # Mid + luxury tiers
-            else:  # $600+ per day
-                tier_prefs = [Tier.luxury]  # Only luxury for very generous budgets
-        else:
-            tier_prefs = [Tier.budget, Tier.mid, Tier.luxury]
+    # CONTINUOUS TARGETING: Use price range if provided
+    use_continuous_targeting = target_price_cents is not None and price_range is not None
+
+    if not use_continuous_targeting:
+        # DEPRECATED: Determine tier preferences based on budget if not provided
+        if tier_prefs is None:
+            if budget_usd_cents:
+                # Calculate trip duration and budget per night
+                nights = max((checkout - checkin).days, 1)
+                trip_days = max(nights, 1)
+                budget_per_day = budget_usd_cents / trip_days
+
+                if budget_per_day < 15000:  # Less than $150/day total budget
+                    tier_prefs = [Tier.budget]  # Only budget lodging
+                elif budget_per_day < 30000:  # Less than $300/day total budget
+                    tier_prefs = [Tier.budget, Tier.mid]  # Budget + mid-tier
+                elif budget_per_day < 60000:  # Less than $600/day total budget
+                    tier_prefs = [Tier.mid, Tier.luxury]  # Mid + luxury tiers
+                else:  # $600+ per day
+                    tier_prefs = [Tier.luxury]  # Only luxury for very generous budgets
+            else:
+                tier_prefs = [Tier.budget, Tier.mid, Tier.luxury]
 
     # Generate lodging from RAG data if available, otherwise use fixtures
     if rag_lodging_data:
@@ -59,8 +71,19 @@ def get_lodging(
     else:
         all_lodging = _generate_fixture_lodging(city)
 
-    # Filter by tier preferences
-    filtered = [option for option in all_lodging if option.tier in tier_prefs]
+    # Filter by price range (continuous) or tier (deprecated)
+    if use_continuous_targeting:
+        min_price, max_price = price_range
+        filtered = [
+            option
+            for option in all_lodging
+            if min_price <= option.price_per_night_usd_cents <= max_price
+        ]
+        # Sort by closeness to target price
+        filtered.sort(key=lambda l: abs(l.price_per_night_usd_cents - target_price_cents))
+    else:
+        # DEPRECATED: Filter by tier preferences
+        filtered = [option for option in all_lodging if option.tier in tier_prefs]
 
     # Return up to 4 options
     return filtered[:4]

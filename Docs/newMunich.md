@@ -22,19 +22,16 @@
 - **Taxi**: 3.70
 
 
-### Alpine Lakes
+### Attractions
+
 - **Lake Starnberg**: 12
 - **Tegernsee**: 14
 - **Chiemsee**: 9
 - **Ammersee**: 8.80
-
-### Historic Cities
-- **Salzburg, Austria**: 32
-- **Nuremberg**: 8
+- **Salzburg Museum**: 32
+- **Nuremberg**: 80
 - **Augsburg**: 15
-- **Regensburg**: 5
-
-### Mountain Adventures
+- **Regensburg**: 55
 - **Garmisch-Partenkirchen**: 69
 - **Mittenwald**: 26
 - **Oberammergau**: 20
