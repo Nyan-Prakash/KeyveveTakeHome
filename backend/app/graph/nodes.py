@@ -867,6 +867,7 @@ def rag_node(state: OrchestratorState) -> OrchestratorState:
 
     This node queries the embedding table for knowledge chunks related to
     the destination city, parses attractions, and makes them available to the planner.
+    Uses semantic search with targeted queries for different types of information.
     """
     from backend.app.graph.rag import retrieve_knowledge_for_destination
     from backend.app.models.common import Geo, Provenance
@@ -878,7 +879,19 @@ def rag_node(state: OrchestratorState) -> OrchestratorState:
     city = state.intent.city
     org_id = state.org_id
 
-    chunks = retrieve_knowledge_for_destination(org_id=org_id, city=city, limit=20)
+    # Use semantic search with a focused query for travel planning
+    # This helps retrieve the most relevant chunks about attractions, lodging, transit, etc.
+    query = (
+        f"popular tourist attractions museums hotels restaurants public transportation "
+        f"getting around travel guide {city}"
+    )
+
+    chunks = retrieve_knowledge_for_destination(
+        org_id=org_id,
+        city=city,
+        limit=20,
+        query=query,  # Use semantic search
+    )
 
     if chunks:
         state.rag_chunks = chunks

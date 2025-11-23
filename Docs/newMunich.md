@@ -1,12 +1,12 @@
 # Munich, Germany Complete Travel Guide
 
-### Airports
+### Flights
  **Munich Airport (MUC)**: 
 
-  -GIG-2342 First Class: 721
-  -GIG-4533 Business Class: 446
-  -GIG-3454 Economy Plus: 334
-  -GIG-6545 Economy: 299
+  -GIG-2342 First Class Flight: 721
+  -GIG-4533 Business Class Flight: 446
+  -GIG-3454 Economy Plus Flight: 334
+  -GIG-6545 Economy Flight: 299
 
 ### Transportation
 - **S-Bahn (S1/S8)**: 12.80

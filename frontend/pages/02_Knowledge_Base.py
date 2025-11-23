@@ -61,38 +61,50 @@ def main():
 
         if uploaded_file:
             if st.button("Upload & Process", type="primary"):
-                with st.spinner("Uploading and processing document..."):
+                with st.spinner("Uploading and processing document (this may take a minute for large files)..."):
                     try:
                         files = {"file": (uploaded_file.name, uploaded_file.getvalue())}
-                        
+
                         # Get auth headers but remove Content-Type for file upload
                         headers = auth.get_auth_headers()
                         if "Content-Type" in headers:
                             del headers["Content-Type"]
-                            
+
+                        # Use longer timeout for embedding generation (5 minutes)
                         upload_response = httpx.post(
                             f"{API_BASE_URL}/destinations/{dest_id}/knowledge/upload",
                             headers=headers,
                             files=files,
-                            timeout=30.0,
+                            timeout=300.0,  # 5 minutes for large documents
                         )
                         upload_response.raise_for_status()
                         result = upload_response.json()
 
+                        # Show detailed results
                         st.success(
-                            f"✅ Document uploaded! {result['chunks_created']} chunks created."
+                            f"✅ Document uploaded successfully!\n\n"
+                            f"- **Chunks created:** {result.get('chunks_created', 'N/A')}\n"
+                            f"- **Embeddings generated:** {result.get('embeddings_created', 'N/A')}\n"
+                            f"- **Embeddings failed:** {result.get('embeddings_failed', 0)}"
                         )
                         st.rerun()
 
+                    except httpx.TimeoutException:
+                        st.error(
+                            "⏱️ Upload timed out. The document may be too large or the OpenAI API is slow. "
+                            "Try uploading a smaller document or try again later."
+                        )
                     except httpx.HTTPError as e:
-                        if e.response:
+                        if hasattr(e, 'response') and e.response:
                             try:
                                 error_detail = e.response.json().get("detail", str(e))
                             except Exception:
                                 error_detail = e.response.text or str(e)
-                            st.error(f"Upload failed: {error_detail}")
+                            st.error(f"❌ Upload failed: {error_detail}")
                         else:
-                            st.error(f"Upload failed: {e}")
+                            st.error(f"❌ Upload failed: {e}")
+                    except Exception as e:
+                        st.error(f"❌ Unexpected error: {e}")
 
         st.divider()
 
