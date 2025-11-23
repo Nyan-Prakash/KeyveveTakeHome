@@ -2,15 +2,10 @@
 
 ### Airports
  **Munich Airport (MUC)**: 
+
   -GIG-2342 First Class: 721
-   **Munich Airport (MUC)**: 
-
   -GIG-4533 Business Class: 446
-   **Munich Airport (MUC)**: 
-
   -GIG-3454 Economy Plus: 334
-   **Munich Airport (MUC)**: 
-
   -GIG-6545 Economy: 299
 
 ### Transportation
@@ -48,5 +43,16 @@
 - **25hours Hotel The Royal Bavarian**: 320
 - **Hotel am Viktualienmarkt**: 280
 - **Pension Westfalia**: 180
+
+### Restaurants
+- **Bavarian Cuisine at Hofbräuhaus**: 25
+- **Traditional German Food**: 20
+- **Vegetarian/Vegan at Max Pett**: 18
+- **Fine Dining at Tantris**: 150
+- **Casual Dining**: 30
+- **Street Food**: 10
+
+
+
 
 
