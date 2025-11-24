@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/api/knowledge.py
+# hypothesis_version: 6.147.0
+
+[0.8, 100, 200, 800, '! ', '.', '. ', '...', '/chunks', '/items', '/upload', '? ', '[EMAIL]', '[PHONE]', 'chunks_created', 'cl100k_base', 'done', 'embedding_failed', 'embeddings_created', 'embeddings_failed', 'error', 'file_type', 'filename', 'item_id', 'knowledge', 'md', 'pdf', 'sanitized_length', 'status', 'token_count', 'txt', 'utf-8']

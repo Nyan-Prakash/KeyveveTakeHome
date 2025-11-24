@@ -6,7 +6,7 @@ These tests verify that:
 3. Tenancy helpers work correctly with all models
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
@@ -36,7 +36,7 @@ class TestTenancyEnforcement:
         org_b = Org(
             org_id=uuid4(),
             name="Org B",
-            created_at=datetime.now(datetime.UTC),
+            created_at=datetime.now(timezone.utc),
         )
         test_session.add(org_b)
 
@@ -46,14 +46,14 @@ class TestTenancyEnforcement:
             org_id=test_org.org_id,
             email="user_a@example.com",
             password_hash="hash",
-            created_at=datetime.now(datetime.UTC),
+            created_at=datetime.now(timezone.utc),
         )
         user_b = User(
             user_id=uuid4(),
             org_id=org_b.org_id,
             email="user_b@example.com",
             password_hash="hash",
-            created_at=datetime.now(datetime.UTC),
+            created_at=datetime.now(timezone.utc),
         )
         test_session.add_all([user_a, user_b])
         test_session.commit()
@@ -76,7 +76,7 @@ class TestTenancyEnforcement:
             city="Paris",
             country="France",
             geo={"lat": 48.8566, "lon": 2.3522},
-            created_at=datetime.now(datetime.UTC),
+            created_at=datetime.now(timezone.utc),
         )
         dest_london = Destination(
             dest_id=uuid4(),
@@ -84,7 +84,7 @@ class TestTenancyEnforcement:
             city="London",
             country="UK",
             geo={"lat": 51.5074, "lon": -0.1278},
-            created_at=datetime.now(datetime.UTC),
+            created_at=datetime.now(timezone.utc),
         )
         test_session.add_all([dest_paris, dest_london])
         test_session.commit()
@@ -104,7 +104,7 @@ class TestTenancyEnforcement:
             city="Paris",
             country="France",
             geo={"lat": 48.8566, "lon": 2.3522},
-            created_at=datetime.now(datetime.UTC),
+            created_at=datetime.now(timezone.utc),
         )
         test_session.add(dest)
         test_session.commit()
@@ -125,7 +125,7 @@ class TestTenancyEnforcement:
         org_b = Org(
             org_id=uuid4(),
             name="Org B",
-            created_at=datetime.now(datetime.UTC),
+            created_at=datetime.now(timezone.utc),
         )
         test_session.add(org_b)
 
@@ -136,7 +136,7 @@ class TestTenancyEnforcement:
             city="Paris",
             country="France",
             geo={"lat": 48.8566, "lon": 2.3522},
-            created_at=datetime.now(datetime.UTC),
+            created_at=datetime.now(timezone.utc),
         )
         test_session.add(dest_b)
         test_session.commit()
@@ -159,7 +159,7 @@ class TestTenancyEnforcement:
                 city=f"City{i}",
                 country="Country",
                 geo={"lat": 0.0, "lon": 0.0},
-                created_at=datetime.now(datetime.UTC),
+                created_at=datetime.now(timezone.utc),
             )
             test_session.add(dest)
         test_session.commit()
@@ -184,7 +184,7 @@ class TestTenancyEnforcement:
                 city=f"City{i}",
                 country="Country",
                 geo={"lat": 0.0, "lon": 0.0},
-                created_at=datetime.now(datetime.UTC),
+                created_at=datetime.now(timezone.utc),
             )
             test_session.add(dest)
         test_session.commit()
@@ -204,7 +204,7 @@ class TestTenancyEnforcement:
             city="Paris",
             country="France",
             geo={"lat": 48.8566, "lon": 2.3522},
-            created_at=datetime.now(datetime.UTC),
+            created_at=datetime.now(timezone.utc),
         )
         test_session.add(dest)
         test_session.commit()
@@ -232,7 +232,7 @@ class TestTenancyEnforcement:
         org_b = Org(
             org_id=uuid4(),
             name="Org B",
-            created_at=datetime.now(datetime.UTC),
+            created_at=datetime.now(timezone.utc),
         )
         test_session.add(org_b)
 
@@ -242,14 +242,14 @@ class TestTenancyEnforcement:
             org_id=test_org.org_id,
             email="user_a@example.com",
             password_hash="hash",
-            created_at=datetime.now(datetime.UTC),
+            created_at=datetime.now(timezone.utc),
         )
         user_b = User(
             user_id=uuid4(),
             org_id=org_b.org_id,
             email="user_b@example.com",
             password_hash="hash",
-            created_at=datetime.now(datetime.UTC),
+            created_at=datetime.now(timezone.utc),
         )
         test_session.add_all([user_a, user_b])
         test_session.commit()
@@ -264,7 +264,7 @@ class TestTenancyEnforcement:
             intent={"city": "Paris"},
             trace_id="trace-a",
             status="completed",
-            created_at=datetime.now(datetime.UTC),
+            created_at=datetime.now(timezone.utc),
         )
         test_session.add(run_a)
         test_session.commit()
@@ -275,7 +275,7 @@ class TestTenancyEnforcement:
             run_id=run_a.run_id,
             user_id=user_a.user_id,
             data={"days": []},
-            created_at=datetime.now(datetime.UTC),
+            created_at=datetime.now(timezone.utc),
         )
         test_session.add(itin_a)
         test_session.commit()

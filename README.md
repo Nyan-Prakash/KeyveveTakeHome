@@ -137,14 +137,30 @@ async with MCPClient("http://localhost:3001") as client:
 ### Knowledge Base Architecture
 - **Storage**: PostgreSQL with pgvector extension
 - **Embeddings**: OpenAI embeddings with 1536 dimensions
-- **Chunking**: Document-level chunking with citation tracking
+- **Chunking**: Token-aware chunking (800 tokens with 100 token overlap)
 - **Retrieval**: Semantic similarity search with organization scoping
+- **PDF Support**: PyMuPDF with OCR for scanned documents
+
+### Supported Document Formats
+- **PDF**: Native text extraction + OCR for scanned documents
+  - Digital PDFs: Fast native text extraction using PyMuPDF
+  - Scanned PDFs: OCR using Tesseract (auto-triggered for low-text pages)
+  - Hybrid PDFs: Combines native text with OCR for embedded images
+- **Markdown**: Full markdown parsing with formatting preservation
+- **Plain Text**: Standard UTF-8 text files
+
+### PDF Processing Features
+- **Hybrid Extraction**: Automatically detects scanned vs. digital PDFs
+- **Smart OCR**: Only triggers OCR when page has <50 characters (configurable)
+- **Image Extraction**: Extracts and OCRs embedded images within PDFs
+- **Page Markers**: Preserves page boundaries for accurate citation
+- **PII Protection**: Strips emails and phone numbers before embedding
 
 ### Citation-Level Tracking
 ```python
 class Citation(BaseModel):
     """Citation with chunk-level attribution."""
-    
+
     text: str
     source_doc: str
     chunk_id: str
@@ -154,12 +170,30 @@ class Citation(BaseModel):
 
 ### Knowledge Management API
 ```bash
-# Upload documents
-POST /api/v1/knowledge/upload
+# Upload documents (PDF, MD, TXT)
+POST /destinations/{dest_id}/knowledge/upload
 Content-Type: multipart/form-data
+file: <PDF|MD|TXT file>
 
-# Search knowledge base  
-GET /api/v1/knowledge/search?q=restaurants+in+paris&limit=10
+# List uploaded documents
+GET /destinations/{dest_id}/knowledge/items
+
+# View knowledge chunks
+GET /destinations/{dest_id}/knowledge/chunks
+
+# Example: Upload travel guide PDF
+curl -X POST http://localhost:8000/destinations/{id}/knowledge/upload \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@kyoto_guide.pdf"
+```
+
+### OCR Configuration
+Environment variables for PDF OCR control:
+```bash
+ENABLE_PDF_OCR=true              # Enable/disable OCR (default: true)
+OCR_DPI_SCALE=2.0                # DPI scaling (2.0 = 144 DPI, higher = better quality)
+OCR_MIN_TEXT_THRESHOLD=50        # Min chars before triggering OCR (default: 50)
+TESSERACT_PATH=/usr/bin/tesseract  # Custom Tesseract path (optional)
 ```
 
 ## 🔐 Authentication & Security
@@ -197,31 +231,50 @@ Authorization: Bearer <access_token>
 - Python 3.11+
 - Docker & Docker Compose
 - Node.js 18+ (for MCP server)
+- **Tesseract OCR** (for PDF text extraction)
+- **Poppler** (for PDF to image conversion)
 
 ### Development Setup
 
-1. **Clone and Install**
+1. **Install System Dependencies**
+```bash
+# macOS
+brew install tesseract poppler
+
+# Ubuntu/Debian
+sudo apt-get update
+sudo apt-get install -y tesseract-ocr poppler-utils
+
+# Verify installation
+tesseract --version
+```
+
+2. **Clone and Install**
 ```bash
 git clone <repository-url>
 cd KeyveveTakeHome
 pip install -e .
 ```
 
-2. **Environment Configuration**
+3. **Environment Configuration**
 ```bash
 cp .env.example .env
 # Edit .env with your configuration:
 # - Database URLs
 # - JWT keys (generate with scripts/generate_keys.py)
 # - API keys for external services
+# - OCR settings (optional):
+#   ENABLE_PDF_OCR=true
+#   OCR_DPI_SCALE=2.0
+#   OCR_MIN_TEXT_THRESHOLD=50
 ```
 
-3. **Start Infrastructure**
+4. **Start Infrastructure**
 ```bash
 docker-compose up -d postgres redis mcp-weather
 ```
 
-4. **Database Setup**
+5. **Database Setup**
 ```bash
 # Run migrations
 alembic upgrade head
@@ -230,13 +283,13 @@ alembic upgrade head
 python seed_db.py
 ```
 
-5. **Start Backend**
+6. **Start Backend**
 ```bash
 cd backend
 uvicorn app.main:app --reload --port 8000
 ```
 
-6. **Start Frontend**
+7. **Start Frontend**
 ```bash
 cd frontend
 streamlit run Home.py --server.port 8501

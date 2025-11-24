@@ -112,3 +112,9 @@ class OrchestratorState(BaseModel):
         default_factory=list,
         description="Retrieved knowledge chunks from RAG for destination",
     )
+
+    # Parsed RAG attractions for planner input
+    rag_attractions: list[Attraction] = Field(
+        default_factory=list,
+        description="Parsed attractions from RAG chunks, available to planner",
+    )

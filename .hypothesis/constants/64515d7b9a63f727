@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/db/retention.py
+# hypothesis_version: 6.147.0
+
+['agent_run_tool_logs', 'agent_runs', 'idempotency_entries', 'itineraries', 'pending']

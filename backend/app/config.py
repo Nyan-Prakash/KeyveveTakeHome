@@ -147,6 +147,24 @@ class Settings(BaseSettings):
         default=10, description="End-to-end p95 budget in seconds"
     )
 
+    # PDF Parsing and OCR Configuration
+    enable_pdf_ocr: bool = Field(
+        default=True,
+        description="Enable OCR for scanned PDFs and embedded images",
+    )
+    ocr_dpi_scale: float = Field(
+        default=2.0,
+        description="DPI scaling factor for OCR (2.0 = 144 DPI, higher = better quality but slower)",
+    )
+    ocr_min_text_threshold: int = Field(
+        default=50,
+        description="Minimum characters on page before triggering OCR (for hybrid extraction)",
+    )
+    tesseract_path: str | None = Field(
+        default=None,
+        description="Custom path to Tesseract OCR executable (auto-detected if None)",
+    )
+
     @field_validator("postgres_url", mode="after")
     @classmethod
     def _normalize_sqlite_url(cls, value: str) -> str:

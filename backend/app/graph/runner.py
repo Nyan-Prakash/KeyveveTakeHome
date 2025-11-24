@@ -47,7 +47,7 @@ def _build_graph() -> Any:
     """Build the LangGraph orchestrator graph.
 
     Graph flow:
-        Intent → Planner → Selector → RAG → ToolExec → Resolve → Verifier → Repair → Synth → Responder
+        Intent → RAG → Planner → Selector → ToolExec → Resolve → Verifier → Repair → Synth → Responder
 
     Returns:
         Compiled LangGraph graph
@@ -57,9 +57,9 @@ def _build_graph() -> Any:
 
     # Add nodes
     graph.add_node("intent", intent_node)
+    graph.add_node("rag", rag_node)
     graph.add_node("planner", planner_node)
     graph.add_node("selector", selector_node)
-    graph.add_node("rag", rag_node)
     graph.add_node("tool_exec", tool_exec_node)
     graph.add_node("resolve", resolve_node)
     graph.add_node("verifier", verifier_node)
@@ -67,12 +67,12 @@ def _build_graph() -> Any:
     graph.add_node("synth", synth_node)
     graph.add_node("responder", responder_node)
 
-    # Define edges (linear flow with RAG integration and resolution)
+    # Define edges (RAG before planner so planner knows what attractions exist)
     graph.set_entry_point("intent")
-    graph.add_edge("intent", "planner")
+    graph.add_edge("intent", "rag")
+    graph.add_edge("rag", "planner")
     graph.add_edge("planner", "selector")
-    graph.add_edge("selector", "rag")
-    graph.add_edge("rag", "tool_exec")
+    graph.add_edge("selector", "tool_exec")
     graph.add_edge("tool_exec", "resolve")
     graph.add_edge("resolve", "verifier")
     graph.add_edge("verifier", "repair")
@@ -121,9 +121,9 @@ def _execute_graph(
         # Execute graph
         node_sequence = [
             "intent",
+            "rag",
             "planner",
             "selector",
-            "rag",
             "tool_exec",
             "resolve",
             "verifier",

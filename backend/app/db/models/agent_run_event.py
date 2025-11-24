@@ -1,6 +1,6 @@
 """Agent run event ORM model for SSE streaming."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -30,7 +30,7 @@ class AgentRunEvent(Base):
     ts: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(datetime.UTC),
+        default=lambda: datetime.now(timezone.utc),
     )
     kind: Mapped[str] = mapped_column(
         Text, nullable=False

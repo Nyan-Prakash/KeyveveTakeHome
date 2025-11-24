@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/planning/selector.py
+# hypothesis_version: 6.147.0
+
+[-1.7, -1.0, -0.8, -0.5, 0.0, 0.3, 0.6, 1.0, 1.5, 5.0, 600.0, 1800.0, 3500.0, 23000, 'Budget calculation', 'Plan scoring summary', 'budget_usd_cents', 'cost', 'cost_weight', 'feature_vector', 'final_score', 'indoor_pref', 'max', 'min', 'per_day_budget_cents', 'per_day_ratio', 'plan_id', 'plan_rank', 'score_range', 'spread', 'theme_match', 'total_plans', 'travel_time', 'trip_days', 'trip_ratio']

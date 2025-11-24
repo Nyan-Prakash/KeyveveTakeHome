@@ -10,7 +10,7 @@ Retention Policies (from SPEC):
 - idempotency entries: 24 hours after TTL
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import Select, and_, or_, select
 from sqlalchemy.orm import Session
@@ -39,7 +39,7 @@ def get_stale_agent_runs(
         stale_runs = session.execute(stmt).scalars().all()
         # Later: delete these runs
     """
-    cutoff = datetime.now(datetime.UTC) - timedelta(days=retention_days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
 
     stmt = select(AgentRun).where(AgentRun.created_at < cutoff)
 
@@ -71,7 +71,7 @@ def get_stale_agent_run_tool_logs(
             run.tool_log = None
         session.commit()
     """
-    cutoff = datetime.now(datetime.UTC) - timedelta(hours=retention_hours)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=retention_hours)
 
     stmt = select(AgentRun).where(
         and_(
@@ -101,7 +101,7 @@ def get_stale_itineraries(
         stmt = get_stale_itineraries(session, retention_days=90)
         stale_itineraries = session.execute(stmt).scalars().all()
     """
-    cutoff = datetime.now(datetime.UTC) - timedelta(days=retention_days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
 
     stmt = select(Itinerary).where(Itinerary.created_at < cutoff)
 
@@ -124,7 +124,7 @@ def get_stale_idempotency_entries(
         stmt = get_stale_idempotency_entries(session)
         stale_entries = session.execute(stmt).scalars().all()
     """
-    now = datetime.now(datetime.UTC)
+    now = datetime.now(timezone.utc)
 
     stmt = select(IdempotencyEntry).where(
         or_(

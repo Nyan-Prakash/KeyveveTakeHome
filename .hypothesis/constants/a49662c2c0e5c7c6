@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/utils/pdf_parser.py
+# hypothesis_version: 6.147.0
+
+[2.0, '\n[OCR extracted]', '--psm 1', '--psm 3', 'author', 'has_text', 'image', 'page_count', 'pdf', 'pillow', 'png', 'pymupdf', 'pytesseract', 'tesseract', 'text', 'title']

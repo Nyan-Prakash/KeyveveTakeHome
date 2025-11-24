@@ -7,7 +7,7 @@ These tests verify:
 4. mark_completed updates status correctly
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
@@ -82,11 +82,11 @@ class TestIdempotencyStore:
             key=key,
             user_id=test_user.user_id,
             org_id=test_org.org_id,
-            ttl_until=datetime.now(datetime.UTC) - timedelta(hours=1),
+            ttl_until=datetime.now(timezone.utc) - timedelta(hours=1),
             status="completed",
             body_hash="body-hash",
             headers_hash="headers-hash",
-            created_at=datetime.now(datetime.UTC) - timedelta(hours=25),
+            created_at=datetime.now(timezone.utc) - timedelta(hours=25),
         )
         test_session.add(expired_entry)
         test_session.commit()

@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/api/auth.py
+# hypothesis_version: 6.147.0
+
+[900, '/auth', '/login', '/logout', '/me', '/refresh', '/signup', 'Account locked', 'Bearer', 'CurrentUser', 'Default Organization', 'Invalid token', 'MEMBER', 'User not found', 'WWW-Authenticate', 'authentication', 'bearer', 'contact', 'error', 'get_current_user', 'locked_until', 'message', 'reason', 'router']

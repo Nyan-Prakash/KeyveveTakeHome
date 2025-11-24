@@ -1,10 +1,12 @@
 """Knowledge Base API endpoints for RAG document management."""
 
 import re
+import time
 from collections.abc import Generator
 from typing import Any
 from uuid import UUID
 
+import tiktoken
 from fastapi import (
     APIRouter,
     Depends,
@@ -13,15 +15,18 @@ from fastapi import (
     UploadFile,
     status,
 )
+from openai import OpenAI
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.api.auth import CurrentUser, get_current_user
+from backend.app.config import get_openai_api_key, get_settings
 from backend.app.db.models.destination import Destination
 from backend.app.db.models.embedding import Embedding
 from backend.app.db.models.knowledge_item import KnowledgeItem
 from backend.app.db.session import get_session_factory
+from backend.app.utils.pdf_parser import extract_text_from_pdf, PDFParsingError
 
 router = APIRouter(prefix="/destinations/{dest_id}/knowledge", tags=["knowledge"])
 
@@ -65,46 +70,92 @@ def strip_pii(text: str) -> str:
     text = re.sub(
         r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "[EMAIL]", text
     )
-    # Strip phone numbers (basic patterns)
+    # Strip phone numbers (various patterns)
+    # Pattern 1: (555) 987-6543
+    text = re.sub(r"\(\d{3}\)\s*\d{3}[-.]?\d{4}", "[PHONE]", text)
+    # Pattern 2: 555-123-4567
     text = re.sub(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b", "[PHONE]", text)
-    text = re.sub(r"\b\(\d{3}\)\s*\d{3}[-.]?\d{4}\b", "[PHONE]", text)
     return text
 
 
-def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 150) -> list[str]:
-    """Chunk text into overlapping segments.
+def chunk_text(text: str, chunk_size: int = 800, overlap: int = 100) -> list[str]:
+    """Chunk text into overlapping segments using token-aware chunking.
 
-    For PR11, using simple character-based chunking.
-    Production would use tiktoken with sentence boundary detection.
+    Uses tiktoken to ensure chunks are properly sized for OpenAI embeddings.
+    Attempts to break at sentence boundaries when possible.
 
     Args:
         text: Text to chunk
-        chunk_size: Target chunk size in characters (~1000 tokens)
-        overlap: Overlap between chunks in characters
+        chunk_size: Target chunk size in tokens (default 800, optimal for embeddings)
+        overlap: Overlap between chunks in tokens (default 100)
 
     Returns:
         List of text chunks
     """
+    try:
+        # Get encoding for text-embedding-ada-002 model
+        encoding = tiktoken.encoding_for_model("text-embedding-ada-002")
+    except KeyError:
+        # Fallback to cl100k_base encoding if model not found
+        encoding = tiktoken.get_encoding("cl100k_base")
+
+    # Encode the entire text into tokens
+    tokens = encoding.encode(text)
+
     chunks = []
     start = 0
 
-    while start < len(text):
-        end = start + chunk_size
-        chunk = text[start:end]
+    while start < len(tokens):
+        # Calculate end position
+        end = min(start + chunk_size, len(tokens))
 
-        # Try to break at sentence boundary
-        if end < len(text):
-            last_period = chunk.rfind(".")
-            last_newline = chunk.rfind("\n")
-            break_point = max(last_period, last_newline)
-            if break_point > chunk_size // 2:  # Only break if we're past halfway
-                end = start + break_point + 1
-                chunk = text[start:end]
+        # Extract chunk tokens
+        chunk_tokens = tokens[start:end]
 
-        chunks.append(chunk.strip())
-        start = end - overlap
+        # Decode back to text
+        chunk_text = encoding.decode(chunk_tokens)
 
-    return [c for c in chunks if c]  # Filter empty chunks
+        # Try to break at sentence boundary if not at the end
+        if end < len(tokens):
+            # Look for sentence endings in the last 20% of the chunk
+            search_start = int(len(chunk_text) * 0.8)
+            remaining = chunk_text[search_start:]
+
+            # Find last sentence boundary
+            last_period = remaining.rfind(". ")
+            last_question = remaining.rfind("? ")
+            last_exclamation = remaining.rfind("! ")
+            last_newline = remaining.rfind("\n\n")
+
+            break_point = max(last_period, last_question, last_exclamation, last_newline)
+
+            if break_point != -1:
+                # Break at sentence boundary (include the punctuation)
+                chunk_text = chunk_text[: search_start + break_point + 1].strip()
+                # Recalculate actual token count for next iteration
+                actual_tokens_used = len(encoding.encode(chunk_text))
+                start = start + actual_tokens_used - overlap
+            else:
+                # No good break point found, use full chunk
+                start = end - overlap
+
+        # Add chunk if it has content
+        if chunk_text.strip():
+            chunks.append(chunk_text.strip())
+
+        # Move to next chunk if we haven't found a sentence boundary
+        if end >= len(tokens):
+            break
+
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_chunks = []
+    for chunk in chunks:
+        if chunk and chunk not in seen:
+            seen.add(chunk)
+            unique_chunks.append(chunk)
+
+    return unique_chunks
 
 
 @router.post("/upload", status_code=status.HTTP_201_CREATED)
@@ -160,14 +211,29 @@ async def upload_knowledge(
     # Read file content
     content_bytes = await file.read()
 
-    # For PR11, simple text extraction
-    # Production would use pypdf for PDF parsing
+    # Extract text based on file type
+    settings = get_settings()
+
     try:
         if file_ext == "pdf":
-            # Stub: for PR11, treat PDF as text (in production, use pypdf2)
-            content = content_bytes.decode("utf-8", errors="ignore")
+            # Use PyMuPDF + OCR for PDF text extraction
+            try:
+                content = extract_text_from_pdf(
+                    content_bytes,
+                    use_ocr=settings.enable_pdf_ocr,
+                    ocr_threshold=settings.ocr_min_text_threshold,
+                    ocr_dpi_scale=settings.ocr_dpi_scale,
+                )
+            except PDFParsingError as pdf_error:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"PDF parsing failed: {str(pdf_error)}",
+                ) from pdf_error
         else:
+            # Plain text files (.md, .txt)
             content = content_bytes.decode("utf-8")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -192,31 +258,119 @@ async def upload_knowledge(
     session.flush()  # Get item_id
 
     # Chunk the content
+    print(f"\n{'='*60}")
+    print(f"KNOWLEDGE UPLOAD: {file.filename}")
+    print(f"{'='*60}")
+    print(f"File size: {len(content)} characters")
+
     chunks = chunk_text(content)
+    print(f"✓ Chunked into {len(chunks)} segments")
 
-    # Create embeddings for each chunk (stub for now)
-    # In production, this would call OpenAI embedding API
-    for chunk_text_content in chunks:
-        # Strip PII before embedding
-        sanitized_chunk = strip_pii(chunk_text_content)
+    # Initialize OpenAI client
+    try:
+        client = OpenAI(api_key=get_openai_api_key())
+        print(f"✓ OpenAI client initialized")
+    except Exception as e:
+        print(f"✗ Failed to initialize OpenAI client: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to initialize OpenAI client: {str(e)}",
+        ) from e
 
-        # Create embedding record with dummy vector
-        # In production, this would be:
-        # vector = openai.embeddings.create(input=sanitized_chunk, model="text-embedding-ada-002")
-        embedding = Embedding(
-            item_id=knowledge_item.item_id,
-            chunk_text=chunk_text_content,  # Store original
-            chunk_metadata={"sanitized_length": len(sanitized_chunk)},
-            # vector field would be populated with actual embeddings in production
-        )
-        session.add(embedding)
+    # Generate embeddings for each chunk
+    embeddings_created = 0
+    embeddings_failed = 0
 
+    # Process chunks in batches of 100 (OpenAI API limit)
+    batch_size = 100
+    total_batches = (len(chunks) + batch_size - 1) // batch_size
+    print(f"\n📊 Processing {len(chunks)} chunks in {total_batches} batch(es)...")
+
+    for i in range(0, len(chunks), batch_size):
+        batch_num = (i // batch_size) + 1
+        batch_chunks = chunks[i : i + batch_size]
+
+        print(f"\n  Batch {batch_num}/{total_batches}: Processing {len(batch_chunks)} chunks...")
+
+        # Prepare sanitized chunks for embedding
+        sanitized_batch = [strip_pii(chunk) for chunk in batch_chunks]
+
+        try:
+            # Generate embeddings for batch
+            print(f"    → Calling OpenAI embeddings API...")
+            start_time = time.time()
+
+            response = client.embeddings.create(
+                input=sanitized_batch,
+                model="text-embedding-ada-002",
+            )
+
+            api_time = time.time() - start_time
+            print(f"    ✓ API responded in {api_time:.2f}s")
+
+            # Create embedding records with vectors
+            print(f"    → Storing embeddings in database...")
+            for j, chunk_text_content in enumerate(batch_chunks):
+                vector = response.data[j].embedding  # 1536-dimensional array
+
+                embedding = Embedding(
+                    item_id=knowledge_item.item_id,
+                    chunk_text=chunk_text_content,  # Store original
+                    vector=vector,  # Store the embedding vector
+                    chunk_metadata={
+                        "sanitized_length": len(sanitized_batch[j]),
+                        "token_count": len(tiktoken.encoding_for_model("text-embedding-ada-002").encode(chunk_text_content)),
+                    },
+                )
+                session.add(embedding)
+                embeddings_created += 1
+
+            print(f"    ✓ Batch {batch_num} complete: {len(batch_chunks)} embeddings created")
+
+        except Exception as e:
+            # Log error but continue processing other batches
+            embeddings_failed += len(batch_chunks)
+            print(f"    ✗ Batch {batch_num} FAILED: {e}")
+            print(f"    → Creating fallback records without embeddings...")
+
+            # Create embedding records without vectors as fallback
+            for chunk_text_content in batch_chunks:
+                sanitized_chunk = strip_pii(chunk_text_content)
+                embedding = Embedding(
+                    item_id=knowledge_item.item_id,
+                    chunk_text=chunk_text_content,
+                    vector=None,  # No vector due to API failure
+                    chunk_metadata={
+                        "sanitized_length": len(sanitized_chunk),
+                        "embedding_failed": True,
+                        "error": str(e)[:200],  # Truncate error message
+                    },
+                )
+                session.add(embedding)
+
+            print(f"    ✓ Fallback records created")
+
+    print(f"\n📝 Committing to database...")
     session.commit()
+    print(f"✓ Database commit successful")
+
+    # Print summary
+    print(f"\n{'='*60}")
+    print(f"UPLOAD COMPLETE")
+    print(f"{'='*60}")
+    print(f"Filename: {file.filename}")
+    print(f"Chunks created: {len(chunks)}")
+    print(f"Embeddings generated: {embeddings_created}")
+    print(f"Embeddings failed: {embeddings_failed}")
+    print(f"Success rate: {embeddings_created / len(chunks) * 100:.1f}%")
+    print(f"{'='*60}\n")
 
     return {
         "item_id": str(knowledge_item.item_id),
         "status": "done",
         "chunks_created": len(chunks),
+        "embeddings_created": embeddings_created,
+        "embeddings_failed": embeddings_failed,
         "filename": file.filename,
     }
 

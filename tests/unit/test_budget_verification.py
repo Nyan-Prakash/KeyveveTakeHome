@@ -42,7 +42,7 @@ def test_budget_with_flight_costs():
         score=0.8,
         provenance=Provenance(
             source="flights_adapter",
-            fetched_at=None,
+            fetched_at=datetime.now(UTC),
             cache_hit=False
         )
     )
@@ -60,7 +60,7 @@ def test_budget_with_flight_costs():
         score=0.8,
         provenance=Provenance(
             source="flights_adapter",
-            fetched_at=None,
+            fetched_at=datetime.now(UTC),
             cache_hit=False
         )
     )
@@ -78,7 +78,7 @@ def test_budget_with_flight_costs():
         score=0.7,
         provenance=Provenance(
             source="lodging_adapter",
-            fetched_at=None,
+            fetched_at=datetime.now(UTC),
             cache_hit=False
         )
     )

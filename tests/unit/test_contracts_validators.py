@@ -10,27 +10,9 @@ from backend.app.models import (
     Choice,
     ChoiceFeatures,
     ChoiceKind,
-    DateWin    def test_minimal_day_count_passes(self):
-        """Plan with 1 day should pass validation."""
-        assumptions = Assumptions(
-            fx_rate_usd_eur=1.1,
-            daily_spend_est_cents=5000,
-        )
-
-        # Test with 1 day
-        days = [
-            self._create_minimal_day_plan(date(2025, 6, 1))
-        ]
-
-        try:
-            plan = PlanV1(
-                days=days,
-                assumptions=assumptions,
-                rng_seed=42,
-            )
-            assert len(plan.days) == 1
-        except ValidationError:
-            pytest.fail("Single day plan should not raise ValidationError")    IntentV1,
+    DateWindow,
+    DayPlan,
+    IntentV1,
     PlanV1,
     Preferences,
     Provenance,
@@ -252,6 +234,28 @@ class TestPlanV1Validation:
             choices=[choice],
         )
         return DayPlan(date=day_date, slots=[slot])
+
+    def test_minimal_day_count_passes(self):
+        """Plan with 1 day should pass validation."""
+        assumptions = Assumptions(
+            fx_rate_usd_eur=1.1,
+            daily_spend_est_cents=5000,
+        )
+
+        # Test with 1 day
+        days = [
+            self._create_minimal_day_plan(date(2025, 6, 1))
+        ]
+
+        try:
+            plan = PlanV1(
+                days=days,
+                assumptions=assumptions,
+                rng_seed=42,
+            )
+            assert len(plan.days) == 1
+        except ValidationError:
+            pytest.fail("Single day plan should not raise ValidationError")
 
     def test_valid_day_count_passes(self):
         """Plan with any number of days should pass validation."""

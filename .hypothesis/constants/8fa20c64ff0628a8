@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/adapters/weather.py
+# hypothesis_version: 6.147.0
+
+[-74.006, -43.1729, -22.9068, -3.7038, -0.1278, 0.0, 0.1, 0.7, 1.0, 2.0, 2.3522, 3.0, 3.6, 5.0, 10.0, 15.0, 20.0, 35.0116, 35.6762, 40.4168, 40.7128, 48.8566, 51.5074, 90.0, 135.7681, 139.6503, 3600, 'Clear', 'Clouds', 'Kyoto', 'London', 'Madrid', 'New York', 'Paris', 'Rain', 'Rio de Janeiro', 'Snow', 'Thunderstorm', 'Tokyo', 'clear', 'cloudy', 'conditions', 'date', 'fixture', 'fixture://weather', 'humidity_percent', 'location', 'openweathermap', 'precip_prob', 'precipitation_mm', 'rain', 'snow', 'storm', 'success', 'temp_c_high', 'temp_c_low', 'temp_celsius', 'temperature_celsius', 'weather', 'wind_kmh', 'wind_speed_ms']
