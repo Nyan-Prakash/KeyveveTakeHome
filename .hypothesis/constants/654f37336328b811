@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/security/middleware.py
+# hypothesis_version: 6.147.0
+
+[429, ',', '/auth/login', '/auth/logout', '/auth/refresh', '/destinations', '/knowledge', '/plan', '1; mode=block', '; ', 'Authorization', 'Bearer ', 'DENY', 'Rate limit exceeded', 'Referrer-Policy', 'Retry-After', 'X-Forwarded-For', 'X-Frame-Options', 'X-Real-IP', 'X-XSS-Protection', "default-src 'self'", 'detail', 'error', "font-src 'self'", 'http://localhost', "img-src 'self' data:", 'nosniff', 'retry_after', 'same-origin', 'unknown']

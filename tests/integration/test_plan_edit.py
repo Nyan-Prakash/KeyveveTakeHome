@@ -9,15 +9,30 @@ from backend.app.main import app
 
 
 @pytest.fixture
-def client():
-    """Create a test client."""
-    return TestClient(app)
+def client(test_session, test_org, test_user):
+    """Create a test client with database session override."""
+    from backend.app.api.plan import get_db_session
+    from backend.app.db.session import get_session
+    from backend.app.api.destinations import get_db_session as dest_get_db_session
+    from backend.app.api.knowledge import get_db_session as knowledge_get_db_session
 
+    # Ensure test data is committed before API calls
+    test_session.commit()
 
-@pytest.fixture
-def auth_headers():
-    """Authentication headers with test token."""
-    return {"Authorization": "Bearer test-token"}
+    def override_get_session():
+        try:
+            yield test_session
+        finally:
+            pass  # Don't close the session, it's managed by the test
+
+    # Override all session dependencies (for auth and all API endpoints)
+    app.dependency_overrides[get_session] = override_get_session
+    app.dependency_overrides[get_db_session] = override_get_session
+    app.dependency_overrides[dest_get_db_session] = override_get_session
+    app.dependency_overrides[knowledge_get_db_session] = override_get_session
+    client = TestClient(app)
+    yield client
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture

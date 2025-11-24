@@ -4,7 +4,7 @@ This module provides a pure, database-backed idempotency store
 that will later be used to wrap HTTP endpoints.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -32,7 +32,7 @@ def get_entry(session: Session, key: str) -> IdempotencyEntry | None:
         return None
 
     # Check if entry has expired
-    now = datetime.now(datetime.UTC)
+    now = datetime.now(timezone.utc)
     if entry.ttl_until < now:
         return None
 
@@ -77,7 +77,7 @@ def save_result(
             ttl_seconds=86400
         )
     """
-    now = datetime.now(datetime.UTC)
+    now = datetime.now(timezone.utc)
     ttl_until = now + timedelta(seconds=ttl_seconds)
 
     # Check if entry exists

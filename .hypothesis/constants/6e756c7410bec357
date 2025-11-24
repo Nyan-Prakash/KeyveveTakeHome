@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/db/models/agent_run_event.py
+# hypothesis_version: 6.147.0
+
+['AgentRun', 'CASCADE', 'Org', 'agent_run.run_id', 'agent_run_event', 'events', 'idx_event_org_run', 'idx_event_run_ts', 'org.org_id', 'org_id', 'run_id', 'ts']

@@ -69,9 +69,9 @@ def verify_budget(
         flight_cost + lodging_cost + attraction_cost + transit_cost + daily_spend_cost
     )
 
-    # Budget with 10% slippage buffer
+    # Budget with 0% slippage buffer
     budget_usd_cents = intent.budget_usd_cents
-    budget_with_slippage = int(budget_usd_cents * 1.10)
+    budget_with_slippage = int(budget_usd_cents * 1.0)
 
     # Emit budget delta metric (always, per SPEC §6.1)
     if metrics:

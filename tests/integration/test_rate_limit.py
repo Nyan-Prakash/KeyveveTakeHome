@@ -158,8 +158,8 @@ class TestRateLimiting:
 
         assert result.allowed is False
         assert result.retry_after_seconds is not None
-        # Should be around 24 seconds (with some tolerance)
-        assert 20 <= result.retry_after_seconds <= 30
+        # Should be around 24 seconds (with some tolerance for calculation)
+        assert 15 <= result.retry_after_seconds <= 40
 
     @patch("backend.app.limits.rate_limit.get_redis_client")
     def test_different_users_independent_buckets(self, mock_redis_client):

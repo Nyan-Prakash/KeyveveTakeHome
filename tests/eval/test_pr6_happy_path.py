@@ -91,8 +91,8 @@ class TestPR6HappyPath:
 
             branches.append(BranchFeatures(plan=plan, features=features))
 
-        # Score branches
-        scored_plans = score_branches(branches)
+        # Score branches with intent
+        scored_plans = score_branches(branches, intent)
 
         # Validate scoring results
         assert len(scored_plans) == len(candidate_plans)
@@ -142,8 +142,8 @@ class TestPR6HappyPath:
                         features.append(choice.features)
             branches.append(BranchFeatures(plan=plan, features=features))
 
-        # Score and select
-        scored = score_branches(branches)
+        # Score and select with intent
+        scored = score_branches(branches, intent)
         selected_plan = scored[0].plan
 
         # Selected plan should be valid and complete
@@ -190,8 +190,8 @@ class TestPR6HappyPath:
                         features.append(slot.choices[0].features)
                 branches.append(BranchFeatures(plan=plan, features=features))
 
-            # Score branches (should trigger logging)
-            score_branches(branches)
+            # Score branches with intent (should trigger logging)
+            score_branches(branches, intent)
 
             # Verify logging was called
             assert mock_logger.info.called

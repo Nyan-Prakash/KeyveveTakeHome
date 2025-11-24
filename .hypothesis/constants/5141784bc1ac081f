@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/adapters/mcp/weather.py
+# hypothesis_version: 6.147.0
+
+[0.0, 0.7, 1.0, 3.0, 3.6, 10.0, 15.0, 20.0, 'city', 'clear', 'conditions', 'current', 'date', 'days', 'forecast', 'high_celsius', 'humidity', 'low_celsius', 'mcp_weather', 'precipitation_mm', 'rain', 'snow', 'storm', 'temperature_celsius', 'weather', 'wind_speed_ms']

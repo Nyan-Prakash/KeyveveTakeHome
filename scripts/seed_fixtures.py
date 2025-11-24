@@ -9,7 +9,7 @@ Usage:
     python scripts/seed_fixtures.py
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from backend.app.db.models.destination import Destination
@@ -47,7 +47,7 @@ def seed_demo_data() -> dict[str, str]:
             org = Org(
                 org_id=uuid4(),
                 name="Demo Organization",
-                created_at=datetime.now(datetime.UTC),
+                created_at=datetime.now(timezone.utc),
             )
             session.add(org)
             session.flush()
@@ -73,7 +73,7 @@ def seed_demo_data() -> dict[str, str]:
                 email="demo@example.com",
                 password_hash="$argon2id$v=19$m=65536,t=3,p=4$placeholder",  # Placeholder
                 locked_until=None,
-                created_at=datetime.now(datetime.UTC),
+                created_at=datetime.now(timezone.utc),
             )
             session.add(user)
             session.flush()
@@ -98,7 +98,7 @@ def seed_demo_data() -> dict[str, str]:
                 country="France",
                 geo={"lat": 48.8566, "lon": 2.3522},
                 fixture_path="fixtures/paris_attractions.json",
-                created_at=datetime.now(datetime.UTC),
+                created_at=datetime.now(timezone.utc),
             )
             session.add(dest)
             session.flush()
@@ -131,7 +131,7 @@ def seed_demo_data() -> dict[str, str]:
                     "category": "attraction",
                     "venue": "Eiffel Tower",
                 },
-                created_at=datetime.now(datetime.UTC),
+                created_at=datetime.now(timezone.utc),
             )
             session.add(knowledge_item)
             session.flush()

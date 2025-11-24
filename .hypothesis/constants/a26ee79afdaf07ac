@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/adapters/flights.py
+# hypothesis_version: 6.147.0
+
+[1.5, 2.5, 2000, 3000, 3600, 5000, 15000, 30000, 50000, 'AA1052', 'American Airlines', 'B6890', 'CDG', 'DL485', 'Delta', 'GIG', 'JFK', 'JetBlue', 'LA8065', 'LATAM Business', 'LHR', 'London', 'MAD', 'Madrid', 'NK8201', 'NRT', 'New York', 'Paris', 'Rio de Janeiro', 'Spirit Airlines', 'Tokyo', 'UA147', 'United Polaris', 'budget', 'fixture', 'fixture://flights', 'json', 'mid', 'premium']

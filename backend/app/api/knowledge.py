@@ -70,9 +70,11 @@ def strip_pii(text: str) -> str:
     text = re.sub(
         r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "[EMAIL]", text
     )
-    # Strip phone numbers (basic patterns)
+    # Strip phone numbers (various patterns)
+    # Pattern 1: (555) 987-6543
+    text = re.sub(r"\(\d{3}\)\s*\d{3}[-.]?\d{4}", "[PHONE]", text)
+    # Pattern 2: 555-123-4567
     text = re.sub(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b", "[PHONE]", text)
-    text = re.sub(r"\b\(\d{3}\)\s*\d{3}[-.]?\d{4}\b", "[PHONE]", text)
     return text
 
 

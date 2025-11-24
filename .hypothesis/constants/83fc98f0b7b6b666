@@ -1,0 +1,4 @@
+# file: /Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome/backend/app/adapters/lodging.py
+# hypothesis_version: 6.147.0
+
+[-74.006, -43.1729, -22.9068, -3.7038, -0.1278, 0.0, 0.01, 2.3522, 11.582, 35.6762, 40.4168, 40.7128, 48.1351, 48.8566, 51.5074, 139.6503, 5000, 8000, 15000, 18000, 30000, 35000, 42000, 60000, 'Budget Inn', 'City Hostel', 'Grand Hotel', 'London', 'Luxury Resort', 'Madrid', 'Munich', 'New York', 'Paris', 'Plaza Suites', 'Rio de Janeiro', 'Royal Palace Hotel', 'Tokyo', 'amenities', 'boutique', 'budget', 'fixture', 'fixture://lodging', 'json', 'luxury', 'mid', 'mid-range', 'name', 'rag', 'rag://lodging', 'tier']
