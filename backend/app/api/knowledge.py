@@ -21,11 +21,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.api.auth import CurrentUser, get_current_user
-from backend.app.config import get_openai_api_key
+from backend.app.config import get_openai_api_key, get_settings
 from backend.app.db.models.destination import Destination
 from backend.app.db.models.embedding import Embedding
 from backend.app.db.models.knowledge_item import KnowledgeItem
 from backend.app.db.session import get_session_factory
+from backend.app.utils.pdf_parser import extract_text_from_pdf, PDFParsingError
 
 router = APIRouter(prefix="/destinations/{dest_id}/knowledge", tags=["knowledge"])
 
@@ -208,14 +209,29 @@ async def upload_knowledge(
     # Read file content
     content_bytes = await file.read()
 
-    # For PR11, simple text extraction
-    # Production would use pypdf for PDF parsing
+    # Extract text based on file type
+    settings = get_settings()
+
     try:
         if file_ext == "pdf":
-            # Stub: for PR11, treat PDF as text (in production, use pypdf2)
-            content = content_bytes.decode("utf-8", errors="ignore")
+            # Use PyMuPDF + OCR for PDF text extraction
+            try:
+                content = extract_text_from_pdf(
+                    content_bytes,
+                    use_ocr=settings.enable_pdf_ocr,
+                    ocr_threshold=settings.ocr_min_text_threshold,
+                    ocr_dpi_scale=settings.ocr_dpi_scale,
+                )
+            except PDFParsingError as pdf_error:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"PDF parsing failed: {str(pdf_error)}",
+                ) from pdf_error
         else:
+            # Plain text files (.md, .txt)
             content = content_bytes.decode("utf-8")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

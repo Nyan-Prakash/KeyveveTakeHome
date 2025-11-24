@@ -8,6 +8,14 @@ from fastapi.testclient import TestClient
 from backend.app.api.knowledge import chunk_text, strip_pii
 from backend.app.main import app
 
+# Check if PDF parsing is available
+try:
+    import fitz  # PyMuPDF
+
+    PDF_AVAILABLE = True
+except ImportError:
+    PDF_AVAILABLE = False
+
 
 @pytest.fixture
 def client():
@@ -83,6 +91,106 @@ Try traditional kaiseki cuisine.
         data = response.json()
         assert data["status"] == "done"
         assert data["chunks_created"] >= 1
+
+    @pytest.mark.skipif(not PDF_AVAILABLE, reason="PDF parsing not available")
+    def test_upload_pdf_with_text(self, client, auth_headers, test_destination):
+        """Test uploading a PDF with extractable text."""
+        import fitz  # PyMuPDF
+
+        dest_id = test_destination["dest_id"]
+
+        # Create a simple test PDF with text
+        pdf_document = fitz.open()
+        page = pdf_document.new_page()
+
+        # Add text content about Kyoto
+        text = """Kyoto Travel Guide
+
+Top Temples:
+- Kinkaku-ji (Golden Pavilion): A stunning Zen Buddhist temple covered in gold leaf
+- Fushimi Inari Shrine: Famous for thousands of vermillion torii gates
+- Kiyomizu-dera: Historic temple with wooden stage offering city views
+
+Best Time to Visit:
+Spring (March-May) for cherry blossoms
+Autumn (September-November) for fall foliage
+"""
+        page.insert_text((72, 72), text)
+
+        # Save to bytes
+        pdf_bytes = pdf_document.write()
+        pdf_document.close()
+
+        # Upload the PDF
+        files = {"file": ("kyoto_guide.pdf", io.BytesIO(pdf_bytes), "application/pdf")}
+
+        response = client.post(
+            f"/destinations/{dest_id}/knowledge/upload",
+            headers=auth_headers,
+            files=files,
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert "item_id" in data
+        assert data["status"] == "done"
+        assert data["chunks_created"] >= 1
+        assert data["filename"] == "kyoto_guide.pdf"
+
+    @pytest.mark.skipif(not PDF_AVAILABLE, reason="PDF parsing not available")
+    def test_upload_multipage_pdf(self, client, auth_headers, test_destination):
+        """Test uploading a multi-page PDF."""
+        import fitz  # PyMuPDF
+
+        dest_id = test_destination["dest_id"]
+
+        # Create a PDF with multiple pages
+        pdf_document = fitz.open()
+
+        # Page 1
+        page1 = pdf_document.new_page()
+        page1.insert_text((72, 72), "Page 1: Introduction to Tokyo\n\nTokyo is Japan's capital.")
+
+        # Page 2
+        page2 = pdf_document.new_page()
+        page2.insert_text((72, 72), "Page 2: Tokyo Attractions\n\nVisit Shibuya and Shinjuku.")
+
+        # Page 3
+        page3 = pdf_document.new_page()
+        page3.insert_text((72, 72), "Page 3: Tokyo Food Scene\n\nTry sushi and ramen.")
+
+        pdf_bytes = pdf_document.write()
+        pdf_document.close()
+
+        files = {"file": ("tokyo_guide.pdf", io.BytesIO(pdf_bytes), "application/pdf")}
+
+        response = client.post(
+            f"/destinations/{dest_id}/knowledge/upload",
+            headers=auth_headers,
+            files=files,
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["chunks_created"] >= 1
+
+    def test_upload_corrupted_pdf(self, client, auth_headers, test_destination):
+        """Test that corrupted PDFs are rejected gracefully."""
+        dest_id = test_destination["dest_id"]
+
+        # Create fake corrupted PDF data
+        fake_pdf = b"%PDF-1.4\ncorrupted data that is not a valid PDF"
+        files = {"file": ("corrupted.pdf", io.BytesIO(fake_pdf), "application/pdf")}
+
+        response = client.post(
+            f"/destinations/{dest_id}/knowledge/upload",
+            headers=auth_headers,
+            files=files,
+        )
+
+        # Should return 400 error for corrupted PDF
+        assert response.status_code == 400
+        assert "PDF parsing failed" in response.json()["detail"]
 
     def test_upload_unsupported_file_type(self, client, auth_headers, test_destination):
         """Test that unsupported file types are rejected."""
