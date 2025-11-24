@@ -2,7 +2,7 @@
 
 Tests verify budget verification logic per SPEC §6.1:
 - Only selected options (first choice) count
-- 10% slippage allowance
+- No slippage - must stay within budget
 - Correct cost categorization
 - Metrics emission
 """
@@ -103,22 +103,22 @@ def test_budget_under_limit():
     assert len(violations) == 0, "Should have no violations when under budget"
 
 
-def test_budget_within_slippage():
-    """Test plan within 10% slippage - no violation."""
+def test_budget_at_exact_limit():
+    """Test plan at exact budget limit - no violation."""
     intent = create_test_intent(budget_usd_cents=100_000)  # $1000
 
-    # Create a plan that's at 108% of budget (within 110% slippage)
-    # Total should be $1080
+    # Create a plan that's at exactly 100% of budget
+    # Total should be $1000
     # 5 days × $10 daily = $50
-    # Remaining for slots: $1080 - $50 = $1030
-    # 5 slots × $206 = $1030
+    # Remaining for slots: $1000 - $50 = $950
+    # 5 slots × $190 = $950
     days = []
     for day_offset in range(5):
         days.append(
             DayPlan(
                 date=date(2025, 6, 1) + __import__("datetime").timedelta(days=day_offset),
                 slots=[
-                    create_test_slot(ChoiceKind.attraction, cost_usd_cents=20_600),
+                    create_test_slot(ChoiceKind.attraction, cost_usd_cents=19_000),
                 ],
             )
         )
@@ -134,25 +134,25 @@ def test_budget_within_slippage():
 
     violations = verify_budget(intent, plan)
 
-    assert len(violations) == 0, "Should have no violations within 10% slippage"
+    assert len(violations) == 0, "Should have no violations at exact budget limit"
 
 
 def test_budget_exceeded():
-    """Test plan over budget with slippage - violation."""
+    """Test plan over budget - violation."""
     intent = create_test_intent(budget_usd_cents=100_000)  # $1000
 
-    # Create a plan that's at 120% of budget (exceeds 110% slippage)
-    # Total should be $1200
+    # Create a plan that's at 101% of budget (exceeds limit with no slippage)
+    # Total should be $1010
     # 5 days × $10 daily = $50
-    # Remaining for slots: $1200 - $50 = $1150
-    # 5 slots × $230 = $1150
+    # Remaining for slots: $1010 - $50 = $960
+    # 5 slots × $192 = $960
     days = []
     for day_offset in range(5):
         days.append(
             DayPlan(
                 date=date(2025, 6, 1) + __import__("datetime").timedelta(days=day_offset),
                 slots=[
-                    create_test_slot(ChoiceKind.attraction, cost_usd_cents=23_000),
+                    create_test_slot(ChoiceKind.attraction, cost_usd_cents=19_200),
                 ],
             )
         )
@@ -177,8 +177,8 @@ def test_budget_exceeded():
 
     # Check details
     assert violation.details["budget_usd_cents"] == 100_000
-    assert violation.details["total_cost_usd_cents"] == 120_000
-    assert violation.details["over_by_usd_cents"] == 20_000
+    assert violation.details["total_cost_usd_cents"] == 101_000
+    assert violation.details["over_by_usd_cents"] == 1_000
 
 
 def test_budget_only_counts_selected_options():

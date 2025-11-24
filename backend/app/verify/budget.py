@@ -1,6 +1,6 @@
 """Budget verification - SPEC §6.1.
 
-Pure function that verifies plan stays within budget with 10% slippage allowance.
+Pure function that verifies plan stays within budget.
 Only counts selected options (first choice in each slot).
 """
 
@@ -27,7 +27,7 @@ def verify_budget(
     Algorithm per SPEC §6.1:
         - Sum cost_usd_cents from selected options only (slot.choices[0])
         - Sum by type: flight + lodging + (daily_spend * days) + attractions + transit
-        - Allow 10% slippage: total <= budget * 1.10
+        - Verify total <= budget (no slippage allowed)
         - If exceeded, return BUDGET violation with delta details
     """
     violations: list[Violation] = []
@@ -69,16 +69,16 @@ def verify_budget(
         flight_cost + lodging_cost + attraction_cost + transit_cost + daily_spend_cost
     )
 
-    # Budget with 0% slippage buffer
+    # Budget with no slippage - must not exceed
     budget_usd_cents = intent.budget_usd_cents
-    budget_with_slippage = int(budget_usd_cents * 1.0)
+    budget_limit = budget_usd_cents
 
     # Emit budget delta metric (always, per SPEC §6.1)
     if metrics:
         metrics.observe_budget_delta(budget_usd_cents, total_cost_usd_cents)
 
     # Check if over budget
-    if total_cost_usd_cents > budget_with_slippage:
+    if total_cost_usd_cents > budget_limit:
         over_by_usd_cents = total_cost_usd_cents - budget_usd_cents
 
         # Emit budget violation metric

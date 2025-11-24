@@ -1643,7 +1643,7 @@ def verifier_node(state: OrchestratorState) -> OrchestratorState:
     """Verify plan constraints using PR7 verifiers.
 
     Runs all four verifiers:
-    - Budget (with 10% slippage)
+    - Budget (no slippage - must stay within budget)
     - Feasibility (timing + venue hours + DST + last train)
     - Weather (tri-state logic)
     - Preferences (must-have vs nice-to-have)

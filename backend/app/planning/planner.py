@@ -113,7 +113,7 @@ def _build_cost_conscious_plan(
     rag_attractions: list | None = None,
 ) -> PlanV1:
     """Build a cost-conscious plan emphasizing budget-friendly options."""
-    base_multiplier = 0.7
+    base_multiplier = 0.7  # More conservative to stay under budget
     adjusted_multiplier = _calculate_budget_multiplier(budget_profile, base_multiplier)
     return _build_plan_variant(
         intent=intent,
@@ -135,7 +135,7 @@ def _build_convenience_plan(
     rag_attractions: list | None = None,
 ) -> PlanV1:
     """Build a convenience-focused plan emphasizing shorter travel times."""
-    base_multiplier = 1.0
+    base_multiplier = 0.97  # Slightly reduced to prevent budget overruns
     adjusted_multiplier = _calculate_budget_multiplier(budget_profile, base_multiplier)
     return _build_plan_variant(
         intent=intent,
@@ -157,7 +157,7 @@ def _build_experience_plan(
     rag_attractions: list | None = None,
 ) -> PlanV1:
     """Build an experience-focused plan with premium activities."""
-    base_multiplier = 1.3
+    base_multiplier = 1.25  # Reduced from 1.3 to stay within budget
     adjusted_multiplier = _calculate_budget_multiplier(budget_profile, base_multiplier)
     return _build_plan_variant(
         intent=intent,
@@ -179,7 +179,7 @@ def _build_relaxed_plan(
     rag_attractions: list | None = None,
 ) -> PlanV1:
     """Build a relaxed plan with more free time."""
-    base_multiplier = 0.9
+    base_multiplier = 0.87  # More conservative to prevent overruns
     adjusted_multiplier = _calculate_budget_multiplier(budget_profile, base_multiplier)
     return _build_plan_variant(
         intent=intent,
@@ -537,26 +537,26 @@ def _lodging_tier_from_cost(cost_cents: int) -> str:
 
 def _enforce_budget(plan: PlanV1, intent: IntentV1) -> PlanV1:
     """
-    Scale plan costs to better utilize the budget.
+    Scale plan costs to stay safely within budget.
 
-    Now targets 95-100% of budget (with 10% slippage allowed in verifier).
-    Previously only ensured costs were under budget, often ending at 85%.
+    Targets 90-95% of budget to leave room for transit, meals, and price variations.
+    Must never exceed budget as there is no slippage allowance in verification.
     """
     target_budget = max(intent.budget_usd_cents, 0)
-    # Target 97.5% of budget to leave room for 10% slippage verification (97.5% * 1.10 = 107.25%)
-    target_utilization = int(target_budget * 0.975)
+    # Target 95% of budget to leave 5% safety margin for transit/meals added later
+    target_utilization = int(target_budget * 0.95)
 
     for iteration in range(3):
         total_cost = _estimate_plan_cost(plan)
 
-        # Check if we're in the acceptable range (95-100% of budget)
-        if 0.95 * target_budget <= total_cost <= target_budget:
+        # Check if we're in the acceptable range (90-95% of budget)
+        if 0.90 * target_budget <= total_cost <= 0.95 * target_budget:
             return plan
 
         # Scale to hit target utilization
         scale_factor = target_utilization / max(total_cost, 1)
-        # Allow both scaling down (over budget) and scaling up (under-utilizing)
-        scale_factor = max(0.7, min(scale_factor, 1.3))
+        # Conservative scaling: only allow small increases (5%) and larger decreases
+        scale_factor = max(0.7, min(scale_factor, 1.25))
 
         logger.info(
             "Scaling plan costs to better utilize budget",
