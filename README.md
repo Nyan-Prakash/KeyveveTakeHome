@@ -225,7 +225,23 @@ GET /api/v1/plans
 Authorization: Bearer <access_token>
 ```
 
-## 🚀 Quick Start
+## 🌐 Deployment (Production)
+
+**Want to deploy this app so others can access it?** Check out our deployment guides:
+
+- **[🚂 Railway Quick Start](RAILWAY_QUICKSTART.md)** - Easiest! Deploy in 15 minutes (~$5-10/month)
+- **[📘 Full Deployment Guide](DEPLOYMENT_GUIDE.md)** - All hosting options with detailed instructions
+  - Railway.app (Recommended for beginners)
+  - Render.com
+  - DigitalOcean App Platform
+  - Self-hosted VPS (Budget option ~$5/month)
+
+**Cost Summary for Personal Projects:**
+- **Recommended**: Railway.app (~$5-10/month) - Zero DevOps, just push to GitHub
+- **Budget**: Hetzner VPS (~$5/month) - Requires some Linux knowledge
+- **Scalable**: DigitalOcean (~$12-25/month) - For growing projects
+
+## 🚀 Quick Start (Local Development)
 
 ### Prerequisites
 - Python 3.11+

@@ -1,0 +1,111 @@
+# Render.com Blueprint Configuration
+# Deploy this entire stack with one click on Render.com
+
+services:
+  # PostgreSQL Database
+  - type: pserv
+    name: triply-postgres
+    env: docker
+    plan: starter
+    region: oregon
+    dockerfilePath: ./Dockerfile.postgres
+    envVars:
+      - key: POSTGRES_DB
+        value: triply
+      - key: POSTGRES_USER
+        value: postgres
+      - key: POSTGRES_PASSWORD
+        generateValue: true
+    disk:
+      name: postgres-data
+      mountPath: /var/lib/postgresql/data
+      sizeGB: 10
+
+  # Redis Cache
+  - type: redis
+    name: triply-redis
+    plan: starter
+    region: oregon
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []
+
+  # MCP Weather Server
+  - type: web
+    name: triply-mcp-weather
+    env: docker
+    region: oregon
+    plan: starter
+    dockerfilePath: ./mcp-server/Dockerfile
+    envVars:
+      - key: PORT
+        value: 3001
+      - key: WEATHER_API_KEY
+        sync: false
+    healthCheckPath: /health
+
+  # Backend API
+  - type: web
+    name: triply-backend
+    env: docker
+    region: oregon
+    plan: starter
+    dockerfilePath: ./backend/Dockerfile
+    envVars:
+      - key: POSTGRES_URL
+        fromDatabase:
+          name: triply-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: triply-redis
+          property: connectionString
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: WEATHER_API_KEY
+        sync: false
+      - key: JWT_PRIVATE_KEY_PEM
+        sync: false
+      - key: JWT_PUBLIC_KEY_PEM
+        sync: false
+      - key: UI_ORIGIN
+        fromService:
+          type: web
+          name: triply-frontend
+          property: url
+      - key: MCP_WEATHER_ENDPOINT
+        fromService:
+          type: web
+          name: triply-mcp-weather
+          property: url
+      - key: MCP_ENABLED
+        value: true
+      - key: ENABLE_PDF_OCR
+        value: true
+    healthCheckPath: /healthz
+    disk:
+      name: uploads
+      mountPath: /app/uploads
+      sizeGB: 5
+
+  # Frontend Streamlit
+  - type: web
+    name: triply-frontend
+    env: docker
+    region: oregon
+    plan: starter
+    dockerfilePath: ./frontend/Dockerfile
+    envVars:
+      - key: BACKEND_URL
+        fromService:
+          type: web
+          name: triply-backend
+          property: hostport
+    healthCheckPath: /_stcore/health
+
+databases:
+  - name: triply-postgres
+    databaseName: triply
+    user: postgres
+    plan: starter
+    region: oregon
