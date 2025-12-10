@@ -63,38 +63,109 @@ def retrieve_knowledge_for_destination(
             )
             query_vector = response.data[0].embedding
 
-            # Semantic search using pgvector cosine distance
-            # Lower distance = more similar
-            # NOTE: This requires pgvector extension and proper vector column type
-            stmt = (
-                select(Embedding.chunk_text)
-                .join(KnowledgeItem, Embedding.item_id == KnowledgeItem.item_id)
-                .where(KnowledgeItem.org_id == org_id)
-                .where(KnowledgeItem.dest_id == destination.dest_id)
-                .where(Embedding.chunk_text.isnot(None))
-                .where(Embedding.vector.isnot(None))  # Only chunks with embeddings
-                .order_by(Embedding.vector.cosine_distance(query_vector))
-                .limit(limit)
-            )
+            # Try pgvector semantic search first
+            try:
+                # Semantic search using pgvector cosine distance
+                # Lower distance = more similar
+                # NOTE: This requires pgvector extension and proper vector column type
+                stmt = (
+                    select(Embedding.chunk_text)
+                    .join(KnowledgeItem, Embedding.item_id == KnowledgeItem.item_id)
+                    .where(KnowledgeItem.org_id == org_id)
+                    .where(KnowledgeItem.dest_id == destination.dest_id)
+                    .where(Embedding.chunk_text.isnot(None))
+                    .where(Embedding.vector.isnot(None))  # Only chunks with embeddings
+                    .order_by(Embedding.vector.cosine_distance(query_vector))
+                    .limit(limit)
+                )
 
-            results = session.execute(stmt).scalars().all()
+                results = session.execute(stmt).scalars().all()
 
-            # If we got semantic results, return them
-            if results:
-                print(f"✅ RAG: Retrieved {len(results)} chunks via semantic search for '{search_query[:50]}...'")
-                return list(results)
+                # If we got semantic results, return them
+                if results:
+                    print(f"✅ RAG: Retrieved {len(results)} chunks via pgvector semantic search for '{search_query[:50]}...'")
+                    return list(results)
+
+            except Exception as pgvector_err:
+                # pgvector operator not available - use Python-based similarity
+                error_msg = str(pgvector_err)
+                print(f"⚠️ RAG: pgvector not available ({error_msg[:80]}), using Python fallback")
+                
+                # Fetch all embeddings for this destination and compute similarity in Python
+                import json
+                import numpy as np
+                
+                stmt = (
+                    select(Embedding.embedding_id, Embedding.chunk_text, Embedding.vector)
+                    .join(KnowledgeItem, Embedding.item_id == KnowledgeItem.item_id)
+                    .where(KnowledgeItem.org_id == org_id)
+                    .where(KnowledgeItem.dest_id == destination.dest_id)
+                    .where(Embedding.chunk_text.isnot(None))
+                    .where(Embedding.vector.isnot(None))
+                )
+                
+                embeddings = session.execute(stmt).all()
+                
+                if not embeddings:
+                    print(f"⚠️ RAG: No embeddings found for {city}")
+                else:
+                    print(f"🔍 RAG: Computing similarity for {len(embeddings)} embeddings in Python...")
+                    
+                    similarities = []
+                    for emb_id, chunk_text, vector in embeddings:
+                        try:
+                            # Handle different vector storage formats
+                            if isinstance(vector, str):
+                                # Vector stored as JSON string
+                                vector = json.loads(vector)
+                            elif isinstance(vector, bytes):
+                                # Vector stored as binary - decode and parse
+                                vector = json.loads(vector.decode('utf-8'))
+                            elif hasattr(vector, '__iter__') and not isinstance(vector, str):
+                                # Already a list/array
+                                vector = list(vector)
+                            else:
+                                # Unknown format, skip
+                                continue
+                            
+                            # Ensure we have a valid list of numbers
+                            if not isinstance(vector, list) or len(vector) != 1536:
+                                continue
+                            
+                            # Compute cosine similarity
+                            # cosine_similarity = dot(a, b) / (norm(a) * norm(b))
+                            vec_array = np.array(vector, dtype=np.float32)
+                            query_array = np.array(query_vector, dtype=np.float32)
+                            
+                            dot_product = np.dot(query_array, vec_array)
+                            query_norm = np.linalg.norm(query_array)
+                            vector_norm = np.linalg.norm(vec_array)
+                            
+                            if query_norm > 0 and vector_norm > 0:
+                                similarity = float(dot_product / (query_norm * vector_norm))
+                                similarities.append((similarity, chunk_text))
+                        except Exception as vec_err:
+                            # Skip this embedding if parsing fails
+                            print(f"⚠️ Skipping embedding {emb_id}: {str(vec_err)[:50]}")
+                            continue
+                    
+                    if similarities:
+                        # Sort by similarity (descending) and take top results
+                        similarities.sort(key=lambda x: x[0], reverse=True)
+                        results = [text for _, text in similarities[:limit]]
+                        
+                        print(f"✅ RAG: Retrieved {len(results)} chunks via Python cosine similarity")
+                        return results
+                    else:
+                        print(f"⚠️ RAG: Could not parse any embeddings for {city}")
 
             # If no results with vectors, fall through to timestamp-based retrieval
             print(f"⚠️ RAG: No embeddings found, falling back to timestamp-based retrieval for {city}")
 
         except Exception as e:
-            # pgvector not available or operator error - fall back to timestamp
-            # Common error: "operator does not exist: text <=> unknown"
+            # General error in embedding generation or query
             error_msg = str(e)
-            if "operator does not exist" in error_msg or "does not exist" in error_msg:
-                print(f"⚠️ RAG: pgvector not available (vector operators missing), using timestamp fallback")
-            else:
-                print(f"⚠️ RAG: Semantic search failed ({error_msg[:100]}), using timestamp fallback for {city}")
+            print(f"⚠️ RAG: Semantic search failed ({error_msg[:100]}), using timestamp fallback for {city}")
 
         # Fallback: Retrieve chunks by recency (original behavior)
         stmt = (
