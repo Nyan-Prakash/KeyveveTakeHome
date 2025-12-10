@@ -51,7 +51,7 @@ def retrieve_knowledge_for_destination(
             return []
 
         # Attempt semantic search with embeddings
-        # Skip if pgvector is not available (vectors stored as TEXT)
+        # Check if pgvector is available first by testing the extension
         try:
             # Generate query embedding
             search_query = query or f"travel guide information attractions hotels restaurants transportation {city}"
@@ -63,38 +63,49 @@ def retrieve_knowledge_for_destination(
             )
             query_vector = response.data[0].embedding
 
-            # Try pgvector semantic search first
+            # Test if pgvector extension is available
+            import json
+            import numpy as np
+            
+            pgvector_available = False
             try:
-                # Semantic search using pgvector cosine distance
-                # Lower distance = more similar
-                # NOTE: This requires pgvector extension and proper vector column type
-                stmt = (
-                    select(Embedding.chunk_text)
-                    .join(KnowledgeItem, Embedding.item_id == KnowledgeItem.item_id)
-                    .where(KnowledgeItem.org_id == org_id)
-                    .where(KnowledgeItem.dest_id == destination.dest_id)
-                    .where(Embedding.chunk_text.isnot(None))
-                    .where(Embedding.vector.isnot(None))  # Only chunks with embeddings
-                    .order_by(Embedding.vector.cosine_distance(query_vector))
-                    .limit(limit)
+                # Quick test: try to check if vector extension exists
+                test_query = session.execute(
+                    "SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'vector')"
                 )
+                pgvector_available = test_query.scalar()
+            except Exception:
+                pgvector_available = False
+            
+            if pgvector_available:
+                try:
+                    # Semantic search using pgvector cosine distance
+                    # Lower distance = more similar
+                    stmt = (
+                        select(Embedding.chunk_text)
+                        .join(KnowledgeItem, Embedding.item_id == KnowledgeItem.item_id)
+                        .where(KnowledgeItem.org_id == org_id)
+                        .where(KnowledgeItem.dest_id == destination.dest_id)
+                        .where(Embedding.chunk_text.isnot(None))
+                        .where(Embedding.vector.isnot(None))
+                        .order_by(Embedding.vector.cosine_distance(query_vector))
+                        .limit(limit)
+                    )
 
-                results = session.execute(stmt).scalars().all()
+                    results = session.execute(stmt).scalars().all()
 
-                # If we got semantic results, return them
-                if results:
-                    print(f"✅ RAG: Retrieved {len(results)} chunks via pgvector semantic search for '{search_query[:50]}...'")
-                    return list(results)
-
-            except Exception as pgvector_err:
-                # pgvector operator not available - use Python-based similarity
-                error_msg = str(pgvector_err)
-                print(f"⚠️ RAG: pgvector not available ({error_msg[:80]}), using Python fallback")
+                    if results:
+                        print(f"✅ RAG: Retrieved {len(results)} chunks via pgvector semantic search")
+                        return list(results)
+                except Exception as e:
+                    print(f"⚠️ RAG: pgvector query failed: {str(e)[:80]}")
+                    pgvector_available = False
+            
+            # Use Python-based similarity if pgvector not available
+            if not pgvector_available:
+                print(f"⚠️ RAG: pgvector extension not available, using Python-based cosine similarity")
                 
-                # Fetch all embeddings for this destination and compute similarity in Python
-                import json
-                import numpy as np
-                
+                # Fetch all embeddings for this destination
                 stmt = (
                     select(Embedding.embedding_id, Embedding.chunk_text, Embedding.vector)
                     .join(KnowledgeItem, Embedding.item_id == KnowledgeItem.item_id)
@@ -133,7 +144,6 @@ def retrieve_knowledge_for_destination(
                                 continue
                             
                             # Compute cosine similarity
-                            # cosine_similarity = dot(a, b) / (norm(a) * norm(b))
                             vec_array = np.array(vector, dtype=np.float32)
                             query_array = np.array(query_vector, dtype=np.float32)
                             
