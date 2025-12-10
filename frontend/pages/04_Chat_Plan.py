@@ -1,4 +1,5 @@
 """Chat-based travel planning with conversational interface."""
+import os
 
 import json
 import time
@@ -9,7 +10,7 @@ import streamlit as st
 from auth import auth
 
 # Configuration
-API_BASE_URL = "http://localhost:8000"
+API_BASE_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
 # Set page config
 st.set_page_config(

@@ -4,6 +4,7 @@ import streamlit as st
 import requests
 from typing import Optional, Dict, Any
 import json
+import os
 import streamlit.components.v1 as components
 
 
@@ -309,5 +310,6 @@ class AuthManager:
         """, height=0)
 
 
-# Global auth manager instance
-auth = AuthManager()
+# Global auth manager instance with backend URL from environment
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+auth = AuthManager(backend_url=BACKEND_URL)

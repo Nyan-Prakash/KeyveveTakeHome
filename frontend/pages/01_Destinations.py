@@ -1,11 +1,12 @@
 """Destinations page for managing travel destinations."""
+import os
 
 import httpx
 import streamlit as st
 from auth import auth
 
 # Configuration
-API_BASE_URL = "http://localhost:8000"
+API_BASE_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
 # Require authentication
 auth.require_auth()
