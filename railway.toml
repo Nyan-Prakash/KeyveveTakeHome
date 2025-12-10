@@ -1,0 +1,10 @@
+# Railway.toml - Monorepo Configuration
+# This file tells Railway where to find each service's Dockerfile
+
+[build]
+builder = "DOCKERFILE"
+
+[deploy]
+startCommand = "echo 'Use service-specific railway files'"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

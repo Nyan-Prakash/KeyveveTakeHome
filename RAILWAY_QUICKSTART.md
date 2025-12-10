@@ -63,6 +63,18 @@ MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A...
    - Choose your `KeyveveTakeHome` repository
    - Click "Deploy Now"
 
+**Important**: Railway will auto-detect your services from the monorepo. It should find three services:
+- `backend` (from `backend/Dockerfile`)
+- `frontend` (from `frontend/Dockerfile`)  
+- `mcp-server` (from `mcp-server/Dockerfile`)
+
+If Railway doesn't auto-detect the services, you can manually configure each one:
+- Click "+ New" → "Empty Service"
+- Name it (e.g., "backend")
+- In Settings → "Build", select "Dockerfile"
+- Set "Dockerfile Path" to `./backend/Dockerfile`
+- Set "Root Directory" to `/` (project root)
+
 3. **Add PostgreSQL Database**
    - Click "+ New" button in your project
    - Select "Database" → "Add PostgreSQL"
