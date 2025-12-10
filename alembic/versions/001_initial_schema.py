@@ -26,16 +26,11 @@ def upgrade() -> None:
     is_postgresql = bind.dialect.name == 'postgresql'
     
     if is_postgresql:
-        # Try to enable pgvector extension (PostgreSQL only)
-        # If it fails, use TEXT as fallback for vector storage
-        try:
-            op.execute('CREATE EXTENSION IF NOT EXISTS vector')
-            from pgvector.sqlalchemy import Vector
-            vector_type = Vector(1536)  # OpenAI embedding dimension
-        except Exception as e:
-            print(f"Warning: pgvector extension not available: {e}")
-            print("Falling back to TEXT storage for embeddings")
-            vector_type = sa.TEXT()  # Store vectors as JSON text if pgvector unavailable
+        # Skip pgvector extension for now - use TEXT as fallback
+        # This allows deployment on standard PostgreSQL without pgvector
+        # RAG will still work but without vector similarity indexing
+        print("Using TEXT storage for embeddings (pgvector not required)")
+        vector_type = sa.TEXT()  # Store vectors as JSON text
         # Use PostgreSQL UUID type
         uuid_type = postgresql.UUID(as_uuid=True)
     else:
