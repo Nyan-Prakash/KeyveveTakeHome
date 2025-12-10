@@ -4,7 +4,6 @@ from datetime import date, time, timedelta
 from unittest.mock import patch
 
 from backend.app.models.common import ChoiceKind, Provenance, TimeWindow
-from backend.app.models.intent import DateWindow, IntentV1, Preferences
 from backend.app.models.plan import (
     Assumptions,
     Choice,
@@ -51,27 +50,6 @@ def create_minimal_plan(features: ChoiceFeatures, plan_id: str = "test") -> Plan
     )
 
 
-def create_test_intent() -> IntentV1:
-    """Helper to create a test intent for selector tests."""
-    start_date = date.today()
-    return IntentV1(
-        city="Paris",
-        date_window=DateWindow(
-            start=start_date,
-            end=start_date + timedelta(days=4),
-            tz="Europe/Paris"
-        ),
-        budget_usd_cents=250_000,  # $2500
-        airports=["CDG"],
-        prefs=Preferences(
-            kid_friendly=False,
-            themes=["art"],
-            avoid_overnight=False,
-            locked_slots=[]
-        )
-    )
-
-
 class TestSelectorFieldSafety:
     """Test that selector never references nonexistent fields."""
 
@@ -95,10 +73,9 @@ class TestSelectorFieldSafety:
 
         plan = create_minimal_plan(features[0])
         branch = BranchFeatures(plan=plan, features=features)
-        intent = create_test_intent()
 
         # This should work without accessing any raw model fields
-        scored_plans = score_branches([branch], intent)
+        scored_plans = score_branches([branch])
 
         assert len(scored_plans) == 1
         assert scored_plans[0].score is not None
@@ -162,10 +139,9 @@ class TestSelectorUseFrozenStats:
 
         plan = create_minimal_plan(features[0])
         branch = BranchFeatures(plan=plan, features=features)
-        intent = create_test_intent()
 
         # Should use frozen stats
-        scored = score_branches([branch], intent)
+        scored = score_branches([branch])
 
         assert len(scored) == 1
         # Score should be computed using frozen normalization
@@ -240,9 +216,8 @@ class TestSelectorScoreLogging:
 
         plan = create_minimal_plan(features[0])
         branch = BranchFeatures(plan=plan, features=features)
-        intent = create_test_intent()
 
-        score_branches([branch], intent)
+        score_branches([branch])
 
         # Should log chosen plan
         mock_logger.info.assert_called()
@@ -273,8 +248,7 @@ class TestSelectorScoreLogging:
             plan = create_minimal_plan(features[0], f"test_{i}")
             branches.append(BranchFeatures(plan=plan, features=features))
 
-        intent = create_test_intent()
-        score_branches(branches, intent)
+        score_branches(branches)
 
         # Should log chosen + 2 discarded plans
         mock_logger.info.assert_called()
@@ -292,8 +266,7 @@ class TestSelectorScoreLogging:
     @patch('backend.app.planning.selector.logger')
     def test_handles_empty_plans(self, mock_logger):
         """Test logging handles empty plan list gracefully."""
-        intent = create_test_intent()
-        score_branches([], intent)
+        score_branches([])
 
         # Should log warning for empty plans
         warning_calls = [call for call in mock_logger.warning.call_args_list
@@ -305,7 +278,7 @@ class TestSelectorScoring:
     """Test scoring computation."""
 
     def test_weighted_score_computation(self):
-        """Test that weighted score is computed correctly with dynamic cost weight."""
+        """Test that weighted score is computed correctly."""
         normalized_vector = {
             "norm_cost": -0.5,      # Good (low cost)
             "norm_travel_time": 0.0,  # Average
@@ -313,12 +286,10 @@ class TestSelectorScoring:
             "norm_indoor_pref": 0.2,  # Slight indoor preference
         }
 
-        # Use a known cost weight
-        cost_weight = -1.0
-        score = _compute_weighted_score(normalized_vector, cost_weight)
+        score = _compute_weighted_score(normalized_vector)
 
-        # Score should be: cost_weight*(-0.5) + -0.5*(0.0) + 1.5*(1.0) + 0.3*(0.2)
-        expected = cost_weight * (-0.5) + (-0.5) * 0.0 + 1.5 * 1.0 + 0.3 * 0.2
+        # Score should be: -1.0*(-0.5) + -0.5*(0.0) + 1.5*(1.0) + 0.3*(0.2) = 0.5 + 0 + 1.5 + 0.06 = 2.06
+        expected = 0.5 + 0.0 + 1.5 + 0.06
         assert abs(score - expected) < 0.01
 
     def test_score_ordering(self):
@@ -349,8 +320,7 @@ class TestSelectorScoring:
             plan = create_minimal_plan(features[0], f"test_{i}")
             plans.append(BranchFeatures(plan=plan, features=features))
 
-        intent = create_test_intent()
-        scored = score_branches(plans, intent)
+        scored = score_branches(plans)
 
         # Good plan should score higher than bad plan
         assert scored[0].score > scored[1].score

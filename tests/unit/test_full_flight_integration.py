@@ -29,18 +29,12 @@ def test_flight_cost_in_full_flow():
     # Test the graph nodes tool execution
     from backend.app.graph.state import OrchestratorState
     from backend.app.graph.nodes import tool_exec_node
-    from uuid import uuid4
     
-    # Create initial state with required fields
-    state = OrchestratorState(
-        trace_id="test-trace",
-        org_id=uuid4(),
-        user_id=uuid4(),
-        seed=42,
-        intent=intent,
-        flights={},
-        tool_call_counts={}
-    )
+    # Create initial state
+    state = OrchestratorState()
+    state.intent = intent
+    state.flights = {}
+    state.tool_call_counts = {}
     
     print("=== Testing Flight Integration in Full Flow ===")
     print(f"Intent: {intent.city}, Budget: ${intent.budget_usd_cents/100:.0f}")

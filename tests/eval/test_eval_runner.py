@@ -49,8 +49,9 @@ class TestEvalRunner:
         assert "scenarios" in output
         assert "Summary:" in output
 
-        # Should mention scenarios with "Scenario:" prefix
-        assert "Scenario:" in output
+        # Should mention both scenarios
+        assert "happy_stub" in output
+        assert "budget_fail_stub" in output
 
     def test_eval_scenarios_have_expected_results(self):
         """Test that eval runner produces expected pass/fail results."""

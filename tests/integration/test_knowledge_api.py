@@ -22,47 +22,27 @@ OPENAI_AVAILABLE = os.environ.get("OPENAI_API_KEY") is not None
 
 
 @pytest.fixture
-def client(test_session):
-    """Create a test client with database session override."""
-    from backend.app.api.knowledge import get_db_session
-    from backend.app.db.session import get_session
-
-    def override_get_session():
-        yield test_session
-
-    # Override both session dependencies (for auth and API endpoints)
-    app.dependency_overrides[get_session] = override_get_session
-    app.dependency_overrides[get_db_session] = override_get_session
-    client = TestClient(app)
-    yield client
-    app.dependency_overrides.clear()
+def client():
+    """Create a test client."""
+    return TestClient(app)
 
 
 @pytest.fixture
-def test_destination(client, auth_headers, test_org, test_session):
+def auth_headers():
+    """Authentication headers with test token."""
+    return {"Authorization": "Bearer test-token"}
+
+
+@pytest.fixture
+def test_destination(client, auth_headers):
     """Create a test destination for knowledge tests."""
-    from backend.app.db.models.destination import Destination
-    from datetime import datetime, timezone
-    from uuid import uuid4
-    
-    dest = Destination(
-        dest_id=uuid4(),
-        org_id=test_org.org_id,
-        city="Kyoto",
-        country="Japan",
-        geo={"lat": 35.0116, "lon": 135.7681},
-        created_at=datetime.now(timezone.utc)
-    )
-    test_session.add(dest)
-    test_session.commit()
-    test_session.refresh(dest)
-    
-    return {
-        "dest_id": str(dest.dest_id),
-        "city": dest.city,
-        "country": dest.country,
-        "geo": dest.geo
+    payload = {
+        "city": "Kyoto",
+        "country": "Japan",
+        "geo": {"lat": 35.0116, "lon": 135.7681},
     }
+    response = client.post("/destinations", json=payload, headers=auth_headers)
+    return response.json()
 
 
 class TestKnowledgeAPI:
@@ -347,9 +327,8 @@ class TestRAGFunctions:
         text = "A" * 2000  # Create text longer than chunk size
         chunks = chunk_text(text, chunk_size=500, overlap=50)
 
-        assert len(chunks) >= 1  # Should have at least one chunk
-        # Note: Due to token encoding, may result in 1 large chunk if no sentence boundaries
-        assert all(chunk.strip() for chunk in chunks)  # All chunks have content
+        assert len(chunks) > 1
+        assert all(len(chunk) <= 550 for chunk in chunks)  # Some tolerance for overlap
 
     def test_chunk_text_sentence_boundary(self):
         """Test that chunking prefers sentence boundaries."""

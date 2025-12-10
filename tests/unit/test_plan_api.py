@@ -67,16 +67,16 @@ def test_post_plan_requires_auth():
 
 
 @pytest.mark.integration
-def test_auth_stub_returns_fixed_user(test_jwt_token, test_user, test_session):
-    """Test that auth returns valid user for JWT token."""
+def test_auth_stub_returns_fixed_user():
+    """Test that auth stub returns fixed test user for any valid token."""
     from fastapi.security import HTTPAuthorizationCredentials
 
     from backend.app.api.auth import get_current_user
 
-    # Use a valid JWT token
-    creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=test_jwt_token)
-    user = get_current_user(creds, test_session)
+    # Any non-empty token should work with stub
+    creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials="test-token")
+    user = get_current_user(creds)
 
-    # Should return the test user
-    assert user.org_id == test_user.org_id
-    assert user.user_id == test_user.user_id
+    # Stub should return fixed UUIDs
+    assert str(user.org_id) == "00000000-0000-0000-0000-000000000001"
+    assert str(user.user_id) == "00000000-0000-0000-0000-000000000002"

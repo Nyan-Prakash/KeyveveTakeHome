@@ -140,11 +140,12 @@ def test_enrichment_integration():
         user_id=uuid.uuid4(),
         seed=42,
         intent=IntentV1(
+            user_id=uuid.uuid4(),
+            org_id=uuid.uuid4(),
             city="Rio de Janeiro",
             date_window=DateWindow(
                 start=date(2025, 6, 1),
-                end=date(2025, 6, 5),
-                tz="America/Sao_Paulo"
+                end=date(2025, 6, 5)
             ),
             airports=["JFK"],
             budget_usd_cents=250000,  # $2500
