@@ -1,5 +1,6 @@
 """FastAPI application factory."""
 
+import logging
 from typing import Any
 
 from fastapi import FastAPI
@@ -13,6 +14,9 @@ from backend.app.api.knowledge import router as knowledge_router
 from backend.app.api.plan import router as plan_router
 from backend.app.config import get_settings
 from backend.app.security.middleware import SecurityHeadersMiddleware, RateLimitMiddleware
+from backend.app.startup_pgvector import enable_pgvector_on_startup
+
+logger = logging.getLogger(__name__)
 
 
 def create_app() -> FastAPI:
@@ -56,7 +60,12 @@ def create_app() -> FastAPI:
     app.include_router(knowledge_router)
     app.include_router(plan_router)
 
-    return app
+    # Startup event: Enable pgvector extension
+    @app.on_event("startup")
+    async def startup_event():
+        """Run startup tasks."""
+        logger.info("🚀 Application starting up...")
+        enable_pgvector_on_startup()
 
     return app
 
