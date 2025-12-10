@@ -24,7 +24,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
 
     app = FastAPI(
-        title="Keyveve Travel Advisor API",
+        title="Triply Travel Advisor API",
         description="Agentic AI Travel Advisor - Backend API",
         version="0.1.0",
     )

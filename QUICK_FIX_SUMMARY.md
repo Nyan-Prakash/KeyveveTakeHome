@@ -29,11 +29,11 @@ Upgrade to PostgreSQL:
 brew install postgresql@14 pgvector
 
 # 2. Create database
-createdb keyveve
-psql keyveve -c "CREATE EXTENSION vector;"
+createdb triply
+psql triply -c "CREATE EXTENSION vector;"
 
 # 3. Update .env
-POSTGRES_URL=postgresql://localhost:5432/keyveve
+POSTGRES_URL=postgresql://localhost:5432/triply
 
 # 4. Run migrations
 alembic upgrade head

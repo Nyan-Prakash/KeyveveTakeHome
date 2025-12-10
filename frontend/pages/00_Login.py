@@ -1,11 +1,11 @@
-"""Login page for Keyveve Travel Planner."""
+"""Login page for Triply Travel Planner."""
 
 import streamlit as st
 import time
 from auth import auth
 
 st.set_page_config(
-    page_title="Login - Keyveve Travel Planner",
+    page_title="Login - Triply Travel Planner",
     page_icon="🔑",
     layout="centered",
 )
@@ -23,7 +23,7 @@ if auth.is_authenticated:
             st.switch_page("Home.py")
     st.stop()
 
-st.title("🔑 Login to Keyveve")
+st.title("🔑 Login to Triply")
 st.markdown("Welcome back! Please sign in to your account.")
 
 # Login form
@@ -81,7 +81,7 @@ st.divider()
 # Demo credentials
 st.info("""
 💡 **Demo Credentials:**
-- Email: `demo@keyveve.com`  
+- Email: `demo@triply.com`  
 - Password: `password123`
 
 Or create a new account with the Sign Up button above.

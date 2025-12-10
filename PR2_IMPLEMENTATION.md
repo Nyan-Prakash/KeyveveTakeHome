@@ -9,7 +9,7 @@ PR2 implements the complete database infrastructure, tenancy enforcement, idempo
 ## File Structure
 
 ```
-KeyveveTakeHome/
+TriplyTakeHome/
 ├── backend/app/
 │   ├── db/                          # Database infrastructure (NEW)
 │   │   ├── __init__.py

@@ -1,4 +1,4 @@
-# Keyveve Travel Planner - Agentic AI Travel Advisor
+# Triply Travel Planner - Agentic AI Travel Advisor
 
 An intelligent travel planning system that generates personalized 4-7 day itineraries with multi-constraint verification, deterministic repair loops, and real-time streaming updates. Built with FastAPI, LangGraph, Streamlit, and PostgreSQL with pgvector for RAG-enhanced planning.
 
@@ -252,7 +252,7 @@ tesseract --version
 2. **Clone and Install**
 ```bash
 git clone <repository-url>
-cd KeyveveTakeHome
+cd TriplyTakeHome
 pip install -e .
 ```
 
@@ -469,7 +469,7 @@ class Settings(BaseSettings):
 ## 📁 Project Structure
 
 ```
-KeyveveTakeHome/
+TriplyTakeHome/
 ├── backend/                 # FastAPI backend
 │   └── app/
 │       ├── api/            # REST API endpoints

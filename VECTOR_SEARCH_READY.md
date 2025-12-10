@@ -14,7 +14,7 @@ Your system is now running PostgreSQL with **real vector embeddings** and **sema
 
 ### Database Connection
 ```
-postgresql://localhost:5432/keyveve
+postgresql://localhost:5432/triply
 ```
 
 ### Test It Now!
@@ -37,7 +37,7 @@ postgresql://localhost:5432/keyveve
 ### Quick Commands
 ```bash
 # Check database
-psql keyveve -c "SELECT COUNT(*) FROM embedding;"
+psql triply -c "SELECT COUNT(*) FROM embedding;"
 
 # See PostgreSQL status
 brew services list | grep postgresql

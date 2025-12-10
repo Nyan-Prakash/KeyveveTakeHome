@@ -144,7 +144,7 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-keyveve}
+      POSTGRES_DB: ${POSTGRES_DB:-triply}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
@@ -188,7 +188,7 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     environment:
-      - POSTGRES_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-keyveve}
+      - POSTGRES_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-triply}
       - REDIS_URL=redis://redis:6379/0
       - MCP_WEATHER_ENDPOINT=http://mcp-weather:3001
       - WEATHER_API_KEY=${WEATHER_API_KEY}
@@ -366,7 +366,7 @@ echo "JWT_PUBLIC_KEY_PEM=\"$(cat jwt-public.pem | tr '\n' '\\n')\""
 
 set -e
 
-echo "🚀 Deploying Keyveve Travel Planner..."
+echo "🚀 Deploying Triply Travel Planner..."
 
 # Check required environment variables
 required_vars=("POSTGRES_PASSWORD" "OPENAI_API_KEY" "WEATHER_API_KEY" "JWT_PRIVATE_KEY_PEM" "JWT_PUBLIC_KEY_PEM")
@@ -409,8 +409,8 @@ echo "📊 Health: http://localhost:8000/healthz"
 # .env.production.example
 
 # Database
-POSTGRES_DB=keyveve_prod
-POSTGRES_USER=keyveve  
+POSTGRES_DB=triply_prod
+POSTGRES_USER=triply  
 POSTGRES_PASSWORD=your_secure_password_here
 
 # Redis

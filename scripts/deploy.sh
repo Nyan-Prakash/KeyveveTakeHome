@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Production deployment script for Keyveve Travel Planner
+# Production deployment script for Triply Travel Planner
 
 set -e
 
-echo "🚀 Deploying Keyveve Travel Planner..."
+echo "🚀 Deploying Triply Travel Planner..."
 
 # Check if .env file exists
 if [[ ! -f .env ]]; then

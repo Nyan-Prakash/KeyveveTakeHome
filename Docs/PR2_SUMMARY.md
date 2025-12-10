@@ -391,7 +391,7 @@ pip install -e .
 **2. Set up database (requires Postgres + pgvector):**
 ```bash
 # Set DATABASE_URL in .env
-export POSTGRES_URL="postgresql://user:pass@localhost:5432/keyveve_dev"
+export POSTGRES_URL="postgresql://user:pass@localhost:5432/triply_dev"
 
 # Run migrations
 alembic upgrade head

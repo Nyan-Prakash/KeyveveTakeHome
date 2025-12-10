@@ -46,4 +46,4 @@ def test_login(email: str, password: str):
 
 
 if __name__ == "__main__":
-    test_login("demo@keyveve.com", "password123")
+    test_login("demo@triply.com", "password123")

@@ -3,10 +3,10 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "keyveve-takehome"
+name = "triply-takehome"
 version = "0.1.0"
-description = "Agentic Travel Planner - Keyveve Take-Home"
-authors = [{name = "Engineering Team", email = "eng@keyveve.com"}]
+description = "Agentic Travel Planner - Triply Take-Home"
+authors = [{name = "Engineering Team", email = "eng@triply.com"}]
 license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.11"

@@ -1,10 +1,10 @@
-"""Home page for Keyveve Travel Planner."""
+"""Home page for Triply Travel Planner."""
 
 import streamlit as st
 from auth import auth
 
 st.set_page_config(
-    page_title="Keyveve Travel Planner",
+    page_title="Triply Travel Planner",
     page_icon="✈️",
     layout="wide",
 )
@@ -15,7 +15,7 @@ auth.restore_session_if_needed()
 # Show authentication status in sidebar
 auth.show_auth_sidebar()
 
-st.title("✈️ Keyveve Travel Planner")
+st.title("✈️ Triply Travel Planner")
 st.markdown("AI-powered travel planning with RAG-enhanced knowledge")
 
 # Welcome message for authenticated users
@@ -170,4 +170,4 @@ with col_b:
 
 st.divider()
 
-st.caption("PR11 — Streamlit Pages + RAG UX + What-If Flows | Keyveve Take-Home")
+st.caption("PR11 — Streamlit Pages + RAG UX + What-If Flows | Triply Take-Home")

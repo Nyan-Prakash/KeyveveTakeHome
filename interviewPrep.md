@@ -1,4 +1,4 @@
-# Keyveve Travel Planner - Interview Preparation Guide
+# Triply Travel Planner - Interview Preparation Guide
 
 > **Last Updated**: 2025-11-23
 > **Branch**: ImplementRag
@@ -29,7 +29,7 @@
 
 ## Project Overview
 
-**Keyveve Travel Planner** is an AI-powered travel planning system that generates personalized 4-7 day itineraries with:
+**Triply Travel Planner** is an AI-powered travel planning system that generates personalized 4-7 day itineraries with:
 
 - **Real-time constraint verification** (budget, weather, timing, preferences)
 - **Multi-step agentic orchestration** using LangGraph
@@ -2439,7 +2439,7 @@ def to_local(dt: datetime, tz: str) -> datetime:
 - "Frontend is Streamlit (rapid prototyping) but could be migrated to React for richer UX"
 
 **Closing Statement**:
-"Keyveve demonstrates end-to-end AI-powered travel planning with real-world constraints, production-grade security, and a scalable architecture. It showcases my ability to design complex systems, integrate LLMs effectively, and balance technical correctness with user experience."
+"Triply demonstrates end-to-end AI-powered travel planning with real-world constraints, production-grade security, and a scalable architecture. It showcases my ability to design complex systems, integrate LLMs effectively, and balance technical correctness with user experience."
 
 ---
 
@@ -2465,7 +2465,7 @@ def to_local(dt: datetime, tz: str) -> datetime:
 
 ```bash
 # Database
-POSTGRES_URL=postgresql://user:pass@localhost:5432/keyveve_dev
+POSTGRES_URL=postgresql://user:pass@localhost:5432/triply_dev
 
 # Auth
 JWT_PRIVATE_KEY_PEM="-----BEGIN RSA PRIVATE KEY-----\n..."
@@ -2518,7 +2518,7 @@ alembic revision --autogenerate -m "description"
 python scripts/seed_db.py
 
 # Connect to DB
-psql -h localhost -U keyveve_user -d keyveve_dev
+psql -h localhost -U triply_user -d triply_dev
 ```
 
 ### Testing Commands

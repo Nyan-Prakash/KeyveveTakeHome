@@ -4,7 +4,7 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-keyveve}
+      POSTGRES_DB: ${POSTGRES_DB:-triply}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
@@ -63,7 +63,7 @@ services:
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     environment:
-      - POSTGRES_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-keyveve}
+      - POSTGRES_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-triply}
       - REDIS_URL=redis://redis:6379/0
       - MCP_WEATHER_ENDPOINT=http://mcp-weather:3001
       - WEATHER_API_KEY=${WEATHER_API_KEY}

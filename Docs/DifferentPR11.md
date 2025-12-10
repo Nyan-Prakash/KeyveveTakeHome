@@ -1946,7 +1946,7 @@ if submit:
 **Repo Layout (Actual):**
 
 ```
-KeyveveTakeHome/
+TriplyTakeHome/
 ├── frontend/          ✅ Streamlit app
 ├── backend/           ✅ FastAPI app
 ├── infrastructure/    ❌ Missing (only docker-compose.dev.yml)
@@ -2030,7 +2030,7 @@ services:
       - postgres
       - redis
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/keyveve
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/triply
       REDIS_URL: redis://redis:6379
     ports:
       - "8000:8000"

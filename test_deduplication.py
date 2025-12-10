@@ -1,7 +1,7 @@
 """Test script to verify attraction deduplication works correctly."""
 
 import sys
-sys.path.insert(0, '/Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome')
+sys.path.insert(0, '/Users/nyanprakash/Desktop/Triply/Attempt2/TriplyTakeHome')
 
 import random
 from datetime import date, time

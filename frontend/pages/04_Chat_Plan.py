@@ -13,7 +13,7 @@ API_BASE_URL = "http://localhost:8000"
 
 # Set page config
 st.set_page_config(
-    page_title="Chat Plan - Keyveve Travel Planner",
+    page_title="Chat Plan - Triply Travel Planner",
     page_icon="💬",
     layout="wide",
 )

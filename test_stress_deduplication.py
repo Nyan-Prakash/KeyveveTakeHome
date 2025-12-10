@@ -1,7 +1,7 @@
 """Stress test for attraction deduplication with limited options."""
 
 import sys
-sys.path.insert(0, '/Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome')
+sys.path.insert(0, '/Users/nyanprakash/Desktop/Triply/Attempt2/TriplyTakeHome')
 
 from datetime import date
 from uuid import uuid4

@@ -12,7 +12,7 @@ def run_test(name: str, command: List[str]) -> Tuple[str, bool]:
         print(f"🔄 Running {name}...")
         result = subprocess.run(
             command,
-            cwd="/Users/nyanprakash/Desktop/Keyveve/Attempt2/KeyveveTakeHome",
+            cwd="/Users/nyanprakash/Desktop/Triply/Attempt2/TriplyTakeHome",
             capture_output=True,
             text=True,
             timeout=60

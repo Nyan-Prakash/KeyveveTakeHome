@@ -8,13 +8,13 @@ Successfully migrated from SQLite to **PostgreSQL** to enable vector-based seman
 - **Database**: PostgreSQL 16 (local)
 - **Vector Storage**: BYTEA (binary) format
 - **Similarity Search**: Python-based cosine similarity
-- **Connection**: `postgresql://localhost:5432/keyveve`
+- **Connection**: `postgresql://localhost:5432/triply`
 
 ## Key Changes Made
 
 ### 1. Database Setup
 - ✅ PostgreSQL 16 installed and running
-- ✅ Database `keyveve` created
+- ✅ Database `triply` created
 - ✅ All migrations applied successfully
 
 ### 2. Code Updates
@@ -24,7 +24,7 @@ Successfully migrated from SQLite to **PostgreSQL** to enable vector-based seman
 - ✅ **knowledge.py**: Auto-detects database type, generates embeddings for PostgreSQL
 
 ### 3. Environment
-- ✅ `.env` updated: `POSTGRES_URL=postgresql://localhost:5432/keyveve`
+- ✅ `.env` updated: `POSTGRES_URL=postgresql://localhost:5432/triply`
 - ✅ `.env.backup` created with old configuration
 
 ## How It Works Now
@@ -77,7 +77,7 @@ curl -X POST "http://localhost:8000/destinations/{dest_id}/knowledge/upload" \
 
 ### 3. Verify Embeddings Generated
 ```bash
-psql keyveve -c "SELECT COUNT(*) as total_embeddings, COUNT(vector) as with_vectors FROM embedding;"
+psql triply -c "SELECT COUNT(*) as total_embeddings, COUNT(vector) as with_vectors FROM embedding;"
 ```
 
 ### 4. Test Semantic Search
@@ -98,7 +98,7 @@ Create a test destination and upload knowledge, then try generating a plan!
 If you have data in the old SQLite database:
 ```bash
 # Export from SQLite
-sqlite3 keyveve_dev.db ".dump" > backup.sql
+sqlite3 triply_dev.db ".dump" > backup.sql
 
 # Import to PostgreSQL (manual process for data mapping)
 # You'll need to adapt the SQL for PostgreSQL
@@ -140,7 +140,7 @@ lsof -i :5432
 
 ### "Database does not exist"
 ```bash
-createdb keyveve
+createdb triply
 alembic upgrade head
 ```
 

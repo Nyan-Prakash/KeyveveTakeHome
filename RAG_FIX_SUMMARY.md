@@ -81,13 +81,13 @@ else:
 
 3. **Create database**:
    ```bash
-   createdb keyveve
-   psql keyveve -c "CREATE EXTENSION vector;"
+   createdb triply
+   psql triply -c "CREATE EXTENSION vector;"
    ```
 
 4. **Update .env**:
    ```properties
-   POSTGRES_URL=postgresql://localhost:5432/keyveve
+   POSTGRES_URL=postgresql://localhost:5432/triply
    ```
 
 5. **Run migrations**:

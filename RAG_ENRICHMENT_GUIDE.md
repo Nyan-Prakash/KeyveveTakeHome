@@ -1,6 +1,6 @@
 # RAG Enrichment for Flights and Transit
 
-This document describes the implementation of RAG (Retrieval Augmented Generation) enrichment for flights and transit data in the Keyveve travel planner.
+This document describes the implementation of RAG (Retrieval Augmented Generation) enrichment for flights and transit data in the Triply travel planner.
 
 ## Overview
 

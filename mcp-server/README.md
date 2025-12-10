@@ -1,6 +1,6 @@
 # Weather MCP Server
 
-Model Context Protocol (MCP) server for weather data integration with Keyveve Travel Planner.
+Model Context Protocol (MCP) server for weather data integration with Triply Travel Planner.
 
 ## Overview
 
@@ -93,7 +93,7 @@ The server provides detailed error responses with appropriate HTTP status codes:
 
 ## Integration
 
-This MCP server is designed to work with the Keyveve backend's MCP client adapter, which provides:
+This MCP server is designed to work with the Triply backend's MCP client adapter, which provides:
 
 - Automatic fallback to direct API calls if MCP is unavailable
 - Request timeout and retry logic

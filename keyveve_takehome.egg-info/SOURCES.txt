@@ -1,9 +1,0 @@
-README.md
-pyproject.toml
-./backend/__init__.py
-backend/__init__.py
-keyveve_takehome.egg-info/PKG-INFO
-keyveve_takehome.egg-info/SOURCES.txt
-keyveve_takehome.egg-info/dependency_links.txt
-keyveve_takehome.egg-info/requires.txt
-keyveve_takehome.egg-info/top_level.txt

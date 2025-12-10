@@ -3,16 +3,16 @@
 
 set -e
 
-echo "🚀 Setting up PostgreSQL with pgvector for Keyveve"
+echo "🚀 Setting up PostgreSQL with pgvector for Triply"
 echo "=================================================="
 
 # Use local PostgreSQL without pgvector extension for now
 # We'll use pure Python cosine similarity instead
 
 # Create database if it doesn't exist
-psql postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'keyveve'" | grep -q 1 || psql postgres -c "CREATE DATABASE keyveve;"
+psql postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'triply'" | grep -q 1 || psql postgres -c "CREATE DATABASE triply;"
 
-echo "✓ Database 'keyveve' ready"
+echo "✓ Database 'triply' ready"
 
 # Update .env file
 ENV_FILE=".env"
@@ -25,10 +25,10 @@ echo "✓ Backed up .env to .env.backup"
 # Update POSTGRES_URL
 if grep -q "^POSTGRES_URL=" "$ENV_FILE"; then
     # Replace existing line
-    sed -i '' 's|^POSTGRES_URL=.*|POSTGRES_URL=postgresql://localhost:5432/keyveve|' "$ENV_FILE"
+    sed -i '' 's|^POSTGRES_URL=.*|POSTGRES_URL=postgresql://localhost:5432/triply|' "$ENV_FILE"
 else
     # Add new line
-    echo "POSTGRES_URL=postgresql://localhost:5432/keyveve" >> "$ENV_FILE"
+    echo "POSTGRES_URL=postgresql://localhost:5432/triply" >> "$ENV_FILE"
 fi
 
 echo "✓ Updated .env with PostgreSQL connection"

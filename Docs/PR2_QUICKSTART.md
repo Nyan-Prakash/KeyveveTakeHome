@@ -30,10 +30,10 @@ This installs all dependencies including PR2 additions:
 
 ```bash
 docker run -d \
-  --name keyveve-postgres \
-  -e POSTGRES_USER=keyveve \
-  -e POSTGRES_PASSWORD=keyveve_dev \
-  -e POSTGRES_DB=keyveve_dev \
+  --name triply-postgres \
+  -e POSTGRES_USER=triply \
+  -e POSTGRES_PASSWORD=triply_dev \
+  -e POSTGRES_DB=triply_dev \
   -p 5432:5432 \
   ankane/pgvector
 ```
@@ -51,8 +51,8 @@ sudo apt-get install postgresql-15-pgvector
 Then create database:
 
 ```bash
-createdb keyveve_dev
-psql keyveve_dev -c "CREATE EXTENSION vector;"
+createdb triply_dev
+psql triply_dev -c "CREATE EXTENSION vector;"
 ```
 
 ### 3. Set Up Redis
@@ -61,7 +61,7 @@ psql keyveve_dev -c "CREATE EXTENSION vector;"
 
 ```bash
 docker run -d \
-  --name keyveve-redis \
+  --name triply-redis \
   -p 6379:6379 \
   redis:7-alpine
 ```
@@ -84,7 +84,7 @@ Create `.env` file in repo root:
 
 ```bash
 # Database
-POSTGRES_URL=postgresql://keyveve:keyveve_dev@localhost:5432/keyveve_dev
+POSTGRES_URL=postgresql://triply:triply_dev@localhost:5432/triply_dev
 
 # Redis
 REDIS_URL=redis://localhost:6379/0
@@ -132,7 +132,7 @@ Created knowledge item (item_id=...)
 **Check database:**
 
 ```bash
-psql keyveve_dev -c "SELECT name FROM org;"
+psql triply_dev -c "SELECT name FROM org;"
 ```
 
 Should show "Demo Organization".
@@ -177,9 +177,9 @@ Expected output: Success, no errors
 alembic downgrade base
 
 # Drop and recreate database
-dropdb keyveve_dev
-createdb keyveve_dev
-psql keyveve_dev -c "CREATE EXTENSION vector;"
+dropdb triply_dev
+createdb triply_dev
+psql triply_dev -c "CREATE EXTENSION vector;"
 
 # Upgrade again
 alembic upgrade head
@@ -210,13 +210,13 @@ redis-cli FLUSHDB
 
 ```bash
 # List all tables
-psql keyveve_dev -c "\dt"
+psql triply_dev -c "\dt"
 
 # Describe a table
-psql keyveve_dev -c "\d user"
+psql triply_dev -c "\d user"
 
 # Count rows
-psql keyveve_dev -c "SELECT COUNT(*) FROM itinerary;"
+psql triply_dev -c "SELECT COUNT(*) FROM itinerary;"
 ```
 
 ## Using PR2 Components

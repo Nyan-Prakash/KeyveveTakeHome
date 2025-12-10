@@ -275,8 +275,8 @@ class AuthManager:
         if token:
             components.html(f"""
             <script>
-                localStorage.setItem('keyveve_auth_token', '{token}');
-                sessionStorage.setItem('keyveve_auth_token', '{token}');
+                localStorage.setItem('triply_auth_token', '{token}');
+                sessionStorage.setItem('triply_auth_token', '{token}');
             </script>
             """, height=0)
             
@@ -284,7 +284,7 @@ class AuthManager:
         """Load token from browser storage."""
         result = components.html("""
         <script>
-            const token = localStorage.getItem('keyveve_auth_token') || sessionStorage.getItem('keyveve_auth_token');
+            const token = localStorage.getItem('triply_auth_token') || sessionStorage.getItem('triply_auth_token');
             if (token) {
                 // Return the token to Streamlit
                 const returnData = {token: token};
@@ -303,8 +303,8 @@ class AuthManager:
         """Clear token from browser storage."""
         components.html("""
         <script>
-            localStorage.removeItem('keyveve_auth_token');
-            sessionStorage.removeItem('keyveve_auth_token');
+            localStorage.removeItem('triply_auth_token');
+            sessionStorage.removeItem('triply_auth_token');
         </script>
         """, height=0)
 

@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     # Database
     postgres_url: str = Field(
-        default="postgresql://user:password@localhost:5432/keyveve_dev",
+        default="postgresql://user:password@localhost:5432/triply_dev",
         description="PostgreSQL connection URL",
     )
     redis_url: str = Field(

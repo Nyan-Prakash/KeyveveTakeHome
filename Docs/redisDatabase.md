@@ -1,6 +1,6 @@
 # Redis Cache & Database Architecture
 
-> Comprehensive documentation explaining how Redis cache and PostgreSQL database systems work in the Keyveve project.
+> Comprehensive documentation explaining how Redis cache and PostgreSQL database systems work in the Triply project.
 
 ---
 
@@ -328,7 +328,7 @@ status = "ok" if redis.ping() else "down"
 
 ```python
 # Connection URL
-POSTGRES_URL = "postgresql://localhost:5432/keyveve"
+POSTGRES_URL = "postgresql://localhost:5432/triply"
 
 # Docker container
 postgres:

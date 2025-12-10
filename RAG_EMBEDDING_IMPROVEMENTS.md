@@ -57,7 +57,7 @@ To enable semantic search:
 1. **Switch to PostgreSQL**:
    ```bash
    # Update .env
-   POSTGRES_URL=postgresql://user:password@localhost:5432/keyveve
+   POSTGRES_URL=postgresql://user:password@localhost:5432/triply
    ```
 
 2. **Install pgvector extension**:

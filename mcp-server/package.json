@@ -1,7 +1,7 @@
 {
   "name": "weather-mcp-server",
   "version": "1.0.0",
-  "description": "MCP Weather Tool Server for Keyveve Travel Planner",
+  "description": "MCP Weather Tool Server for Triply Travel Planner",
   "type": "module",
   "main": "src/server.js",
   "scripts": {

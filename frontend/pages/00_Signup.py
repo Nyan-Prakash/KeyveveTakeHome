@@ -1,11 +1,11 @@
-"""Signup page for Keyveve Travel Planner."""
+"""Signup page for Triply Travel Planner."""
 
 import streamlit as st
 import re
 from auth import auth
 
 st.set_page_config(
-    page_title="Sign Up - Keyveve Travel Planner",
+    page_title="Sign Up - Triply Travel Planner",
     page_icon="📝",
     layout="centered",
 )
@@ -18,7 +18,7 @@ if auth.is_authenticated:
     st.stop()
 
 st.title("📝 Create Your Account")
-st.markdown("Join Keyveve and start planning amazing trips with AI!")
+st.markdown("Join Triply and start planning amazing trips with AI!")
 
 # Helper functions for validation
 def validate_email(email: str) -> bool:
@@ -107,7 +107,7 @@ if signup_submitted:
     else:
         with st.spinner("Creating your account..."):
             if auth.signup(email, password):
-                st.success("Account created successfully! Welcome to Keyveve!")
+                st.success("Account created successfully! Welcome to Triply!")
                 st.balloons()
                 # Small delay to show success message
                 st.rerun()
@@ -116,7 +116,7 @@ st.divider()
 
 # Benefits of signing up
 st.markdown("""
-### 🌟 Why Join Keyveve?
+### 🌟 Why Join Triply?
 
 ✈️ **AI-Powered Planning** - Get personalized travel recommendations  
 🧠 **Knowledge Base** - Access curated travel information  
