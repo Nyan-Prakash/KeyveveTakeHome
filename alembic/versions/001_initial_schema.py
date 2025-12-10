@@ -111,11 +111,12 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(['item_id'], ['knowledge_item.item_id'], ondelete='CASCADE'),
     )
     
-    # Create vector index (PostgreSQL only)
-    if is_postgresql:
-        op.execute(
-            'CREATE INDEX idx_embedding_vector ON embedding USING ivfflat (vector vector_cosine_ops) WITH (lists = 100)'
-        )
+    # Skip vector index - requires pgvector extension
+    # Can be added later if pgvector is installed
+    # if is_postgresql:
+    #     op.execute(
+    #         'CREATE INDEX idx_embedding_vector ON embedding USING ivfflat (vector vector_cosine_ops) WITH (lists = 100)'
+    #     )
 
     # Create agent_run table
     op.create_table(
