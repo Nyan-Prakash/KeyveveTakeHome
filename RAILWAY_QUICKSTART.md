@@ -235,6 +235,23 @@ railway run python seed_db.py
 
 ## 🔧 Troubleshooting
 
+### "Dockerfile does not exist" error
+
+Railway is looking for Dockerfiles in the root, but they're in subdirectories.
+
+**Fix:**
+1. Click on the service that's failing
+2. Go to **Settings** tab
+3. Find **Build** section
+4. Set "Dockerfile Path":
+   - Backend: `./backend/Dockerfile`
+   - Frontend: `./frontend/Dockerfile`
+   - MCP Weather: `./mcp-server/Dockerfile`
+5. Set "Root Directory" to `/` (leave blank or set to root)
+6. Click "Redeploy"
+
+**Alternative**: Railway should auto-detect services from the monorepo using the `railway.*.json` config files in the repository root.
+
 ### Backend won't deploy
 
 **Check logs:**
