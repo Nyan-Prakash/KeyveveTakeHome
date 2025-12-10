@@ -51,6 +51,7 @@ def retrieve_knowledge_for_destination(
             return []
 
         # Attempt semantic search with embeddings
+        # Skip if pgvector is not available (vectors stored as TEXT)
         try:
             # Generate query embedding
             search_query = query or f"travel guide information attractions hotels restaurants transportation {city}"
@@ -64,6 +65,7 @@ def retrieve_knowledge_for_destination(
 
             # Semantic search using pgvector cosine distance
             # Lower distance = more similar
+            # NOTE: This requires pgvector extension and proper vector column type
             stmt = (
                 select(Embedding.chunk_text)
                 .join(KnowledgeItem, Embedding.item_id == KnowledgeItem.item_id)
@@ -79,15 +81,20 @@ def retrieve_knowledge_for_destination(
 
             # If we got semantic results, return them
             if results:
-                print(f"RAG: Retrieved {len(results)} chunks via semantic search for '{search_query[:50]}...'")
+                print(f"✅ RAG: Retrieved {len(results)} chunks via semantic search for '{search_query[:50]}...'")
                 return list(results)
 
             # If no results with vectors, fall through to timestamp-based retrieval
-            print(f"RAG: No embeddings found, falling back to timestamp-based retrieval for {city}")
+            print(f"⚠️ RAG: No embeddings found, falling back to timestamp-based retrieval for {city}")
 
         except Exception as e:
-            # Log error and fall back to timestamp-based retrieval
-            print(f"RAG: Semantic search failed ({str(e)}), using timestamp fallback for {city}")
+            # pgvector not available or operator error - fall back to timestamp
+            # Common error: "operator does not exist: text <=> unknown"
+            error_msg = str(e)
+            if "operator does not exist" in error_msg or "does not exist" in error_msg:
+                print(f"⚠️ RAG: pgvector not available (vector operators missing), using timestamp fallback")
+            else:
+                print(f"⚠️ RAG: Semantic search failed ({error_msg[:100]}), using timestamp fallback for {city}")
 
         # Fallback: Retrieve chunks by recency (original behavior)
         stmt = (
