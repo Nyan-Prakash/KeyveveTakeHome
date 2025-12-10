@@ -222,6 +222,72 @@ User Input → AI Planning → Verification → Repair → Final Itinerary
 
 ---
 
+🎯 What Happens When You Create a Destination
+High-Level Flow:
+API Request: User sends POST /destinations with city, country, and GPS coordinates
+Authentication: JWT token is verified and user's org_id is extracted
+Validation: FastAPI validates the request (city/country 1-200 chars, lat/lon within geographic bounds)
+Duplicate Check: System checks if this city+country already exists for your organization
+Database Insert: Creates new destination record with auto-generated UUID
+Response: Returns the destination with a 201 status code
+Key Details for Your Interview:
+Multi-tenancy: Every destination is scoped to an organization (org_id). Users can only create destinations in their own org
+Unique Constraint: You can't have duplicate destinations (same city+country combo) within an org
+Geo Storage: GPS coordinates stored as JSONB in PostgreSQL for flexibility
+Cascade Delete: If an org is deleted, all its destinations are automatically removed
+File References:
+API: destinations.py:142-186
+Model: destination.py
+📄 What Happens When You Upload a PDF
+High-Level Flow:
+Upload & Auth: PDF uploaded to POST /destinations/{dest_id}/knowledge/upload, user verified
+Text Extraction (3-tier strategy):
+Tier 1: Native text extraction with PyMuPDF for digital PDFs
+Tier 2: OCR trigger if page has <50 characters (scanned documents)
+Tier 3: Extract and OCR embedded images
+Chunking: Text split into ~800 token chunks at sentence boundaries with 100 token overlap
+PII Stripping: Emails and phone numbers replaced with [EMAIL] and [PHONE] tokens
+Embedding Generation: Send sanitized chunks to OpenAI's text-embedding-ada-002 (1536 dimensions)
+Vector Storage: Store embeddings in PostgreSQL with pgvector extension
+RAG Ready: Now searchable via semantic similarity for travel planning
+Key Details for Your Interview:
+OCR Support: Automatically detects scanned PDFs and applies Tesseract OCR at 2x DPI scaling
+Configurable: OCR can be disabled or tuned via config (DPI scale, character threshold)
+Batch Processing: Processes embeddings in batches of 100 chunks for efficiency
+Error Resilience: If embedding fails, chunk is still stored (without vector) for text search fallback
+Privacy: PII stripped before sending to OpenAI, but original text stored in database
+File References:
+Upload API: knowledge.py:161-375
+PDF Parser: pdf_parser.py
+RAG Retrieval: rag.py
+📝 What Happens When You Upload Markdown
+High-Level Flow:
+Upload & Auth: Same as PDF - authenticate and verify destination ownership
+Text Extraction: Simple UTF-8 decode - no OCR, no special parsing needed
+Chunking: Same as PDF - 800 tokens with 100 token overlap at sentence boundaries
+PII Stripping: Same sanitization process
+Embedding Generation: Same OpenAI API calls
+Vector Storage: Same pgvector storage
+Key Differences from PDF:
+No OCR: Markdown is already text, so extraction is instant
+Formatting Preserved: Headers, lists, bold text stay intact in chunks
+Faster Processing: No image extraction or page detection needed
+No Page Markers: Unlike PDFs (which add --- Page N ---), markdown chunks preserve original structure
+Key Details for Your Interview:
+Best for Travel Guides: Markdown is ideal for structured guides with sections, lists, and formatting
+Same Backend: Uses identical chunking, embedding, and storage pipeline as PDFs
+Format Agnostic: Once embedded, markdown chunks are retrieved the same way as PDF chunks in RAG
+File References:
+Same upload API handles all file types: knowledge.py:211-241
+🔍 How RAG (Retrieval Augmented Generation) Works
+When Planning a Trip:
+Query Generation: System creates query like "travel guide attractions hotels restaurants [city name]"
+Query Embedding: Query converted to 1536-dim vector via OpenAI
+Semantic Search: pgvector finds 20 most similar chunks using cosine distance
+Venue Extraction: GPT-4o-mini parses chunks to extract attractions (name, type, price, indoor/outdoor)
+Integration: Extracted venues added to planning state as rag_attractions
+Itinerary Building: RAG attractions used alongside synthetic attractions in final itinerary
+
 ## LangGraph Orchestration
 
 ### Workflow Diagram

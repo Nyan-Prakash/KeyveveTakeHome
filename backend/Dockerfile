@@ -44,4 +44,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 EXPOSE 8000
 
 # Use factory pattern for app creation
-CMD ["uvicorn", "backend.app.main:create_app", "--host", "0.0.0.0", "--port", "8000", "--factory"]
+# Run database migrations before starting the server
+CMD sh -c "alembic upgrade head && uvicorn backend.app.main:create_app --host 0.0.0.0 --port 8000 --factory"
