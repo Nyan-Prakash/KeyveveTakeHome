@@ -16,19 +16,19 @@ RUN apt-get update \
         curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Copy application code first (needed for pip install -e)
+COPY backend/ backend/
+COPY scripts/ scripts/
+COPY alembic/ alembic/
+COPY alembic.ini ./
+COPY eval/ eval/
+
 # Copy and install Python dependencies
 COPY pyproject.toml ./
 RUN pip install -e .
 
 # Create non-root user
 RUN adduser --disabled-password --gecos '' appuser
-
-# Copy application code
-COPY backend/ backend/
-COPY scripts/ scripts/
-COPY alembic/ alembic/
-COPY alembic.ini ./
-COPY eval/ eval/
 
 # Create uploads directory
 RUN mkdir -p /app/uploads && chown -R appuser:appuser /app/uploads
