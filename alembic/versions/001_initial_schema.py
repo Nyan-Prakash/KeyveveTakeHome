@@ -26,11 +26,17 @@ def upgrade() -> None:
     is_postgresql = bind.dialect.name == 'postgresql'
     
     if is_postgresql:
-        # Skip pgvector extension for now - use TEXT as fallback
-        # This allows deployment on standard PostgreSQL without pgvector
-        # RAG will still work but without vector similarity indexing
-        print("Using TEXT storage for embeddings (pgvector not required)")
-        vector_type = sa.TEXT()  # Store vectors as JSON text
+        # Try to enable pgvector extension for semantic search
+        try:
+            op.execute('CREATE EXTENSION IF NOT EXISTS vector')
+            from pgvector.sqlalchemy import Vector
+            vector_type = Vector(1536)  # OpenAI ada-002 embedding dimension
+            print("✅ pgvector extension enabled, using proper VECTOR columns")
+        except Exception as e:
+            # Fallback to TEXT if pgvector not available
+            print(f"⚠️ pgvector extension not available: {e}")
+            print("Using TEXT storage for embeddings (pgvector not required)")
+            vector_type = sa.TEXT()
         # Use PostgreSQL UUID type
         uuid_type = postgresql.UUID(as_uuid=True)
     else:
@@ -111,12 +117,15 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(['item_id'], ['knowledge_item.item_id'], ondelete='CASCADE'),
     )
     
-    # Skip vector index - requires pgvector extension
-    # Can be added later if pgvector is installed
-    # if is_postgresql:
-    #     op.execute(
-    #         'CREATE INDEX idx_embedding_vector ON embedding USING ivfflat (vector vector_cosine_ops) WITH (lists = 100)'
-    #     )
+    # Create vector index if pgvector is available
+    if is_postgresql and isinstance(vector_type, type(vector_type)) and vector_type != sa.TEXT():
+        try:
+            op.execute(
+                'CREATE INDEX idx_embedding_vector ON embedding USING ivfflat (vector vector_cosine_ops) WITH (lists = 100)'
+            )
+            print("✅ Created ivfflat index for vector similarity search")
+        except Exception as e:
+            print(f"⚠️ Could not create vector index (pgvector may not be available): {e}")
 
     # Create agent_run table
     op.create_table(
