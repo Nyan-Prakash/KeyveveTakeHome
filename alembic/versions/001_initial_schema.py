@@ -26,12 +26,18 @@ def upgrade() -> None:
     is_postgresql = bind.dialect.name == 'postgresql'
     
     if is_postgresql:
-        # Enable pgvector extension (PostgreSQL only)
-        op.execute('CREATE EXTENSION IF NOT EXISTS vector')
-        from pgvector.sqlalchemy import Vector
+        # Try to enable pgvector extension (PostgreSQL only)
+        # If it fails, use TEXT as fallback for vector storage
+        try:
+            op.execute('CREATE EXTENSION IF NOT EXISTS vector')
+            from pgvector.sqlalchemy import Vector
+            vector_type = Vector(1536)  # OpenAI embedding dimension
+        except Exception as e:
+            print(f"Warning: pgvector extension not available: {e}")
+            print("Falling back to TEXT storage for embeddings")
+            vector_type = sa.TEXT()  # Store vectors as JSON text if pgvector unavailable
         # Use PostgreSQL UUID type
         uuid_type = postgresql.UUID(as_uuid=True)
-        vector_type = Vector(1536)  # OpenAI embedding dimension
     else:
         # Use SQLite compatible types
         uuid_type = sa.String(36)  # Store UUIDs as strings in SQLite
